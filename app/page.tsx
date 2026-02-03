@@ -7,7 +7,7 @@ import { PreloadTrigger } from '@/components/preload-trigger';
 import { BackgroundSync } from '@/components/background-sync';
 
 export default async function HomePage() {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   try {
     // Probeer eerst de session te refreshen

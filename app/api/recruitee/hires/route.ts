@@ -14,7 +14,7 @@ export async function GET(request: Request) {
     const includeApplications = searchParams.get('include_applications') === 'true';
     const useCache = searchParams.get('use_cache') !== 'false'; // Default true
 
-    const supabase = createClient();
+    const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
     // Rate limiting: max 20 requests per minute per user
