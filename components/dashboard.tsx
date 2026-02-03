@@ -110,18 +110,7 @@ export default function Dashboard() {
     return 0;
   };
   
-  // Debug: log company hires data
-  if (companyHiresData) {
-    console.log('[DASHBOARD] Company hires data:', {
-      totalHires: companyHiresData.totalHires,
-      companyCount: Object.keys(companyHires).length,
-      sampleCompanies: Object.entries(companyHires).slice(0, 5),
-      sampleJobCompanies: companyGroupsWithPriority.slice(0, 3).map(g => ({
-        name: g.company.name,
-        hires: getCompanyHires(g.company.name),
-      })),
-    });
-  }
+  // Debug logging will be done after companyGroupsWithPriority is created
 
   // Combine jobs with priorities
   const vacanciesWithPriority: VacancyWithPriority[] = jobs.map((job) => {
