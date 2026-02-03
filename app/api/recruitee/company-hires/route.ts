@@ -19,6 +19,7 @@ export async function GET(request: Request) {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
 
+    // ALTIJD eerst database checken - Data flow: API → Database → Frontend
     let hires: any[] = [];
 
     if (user) {
@@ -29,16 +30,24 @@ export async function GET(request: Request) {
         .single();
 
       if (cache && (cache as any).hires) {
-        console.log('[COMPANY-HIRES] Using cached hires data');
+        console.log('[DATABASE] Using hires data from database for company-hires');
         hires = JSON.parse((cache as any).hires || '[]');
       }
     }
 
-    // If no cache, fetch from API
+    // If no cache, return empty (should not happen if refresh was done)
     if (hires.length === 0) {
-      console.log('[COMPANY-HIRES] Cache miss, fetching from API');
-      const result = await fetchAllCandidatesAndApplications();
-      hires = result.hires;
+      console.log('[DATABASE MISS] No hires data in database. Please run Data Refresh first.');
+      // Return empty data instead of fetching from API
+      return NextResponse.json({
+        companyHires: {},
+        totalHires: 0,
+        days,
+        startDate: startDate.toISOString(),
+        endDate: endDate.toISOString(),
+        source: 'none',
+        message: 'No cached data available. Please click "Data Refresh" button first.',
+      });
     }
 
     // Group by company and filter by date

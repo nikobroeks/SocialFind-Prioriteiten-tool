@@ -38,6 +38,7 @@ export async function GET(request: Request) {
 
     // ALTIJD eerst proberen cache te gebruiken als beschikbaar (ongeacht filters)
     // Filters worden client-side toegepast op de gecachte data
+    // Data flow: API → Database → Frontend (geen directe API calls naar Recruitee)
     if (useCache && user) {
       const { data: cache } = await supabase
         .from('recruitee_cache')
@@ -45,41 +46,50 @@ export async function GET(request: Request) {
         .eq('user_id', user.id)
         .single();
 
-      if (cache && (cache as any).cached_at) {
-        const cachedAt = new Date((cache as any).cached_at);
-        const now = new Date();
-        const age = now.getTime() - cachedAt.getTime();
+      if (cache && ((cache as any).hires || (cache as any).applications)) {
+        console.log('[DATABASE] Using cached data from database (age:', Math.round((Date.now() - new Date((cache as any).cached_at).getTime()) / 1000), 'seconds)');
+        const cachedHires = JSON.parse((cache as any).hires || '[]');
+        const cachedApplications = JSON.parse((cache as any).applications || '[]');
+        const cachedStats = (cache as any).stats ? JSON.parse((cache as any).stats) : null;
 
-        // Cache is geldig als deze minder dan 5 minuten oud is (of altijd als er data is)
-        if (age < CACHE_DURATION_MS || (cache as any).hires || (cache as any).applications) {
-          console.log('[CACHE HIT] Using cached data for hires/applications (age:', Math.round(age / 1000), 'seconds)');
-          const cachedHires = JSON.parse((cache as any).hires || '[]');
-          const cachedApplications = JSON.parse((cache as any).applications || '[]');
-          const cachedStats = (cache as any).stats ? JSON.parse((cache as any).stats) : null;
-
-          // Return ALL cached data - filtering happens client-side
-          if (includeApplications) {
-            return NextResponse.json({
-              applications: cachedApplications,
-              hires: cachedHires,
-              applicationsCount: cachedApplications.length,
-              hiresCount: cachedHires.length,
-              stats: cachedStats,
-              cached: true,
-            });
-          } else {
-            return NextResponse.json({
-              hires: cachedHires,
-              count: cachedHires.length,
-              cached: true,
-            });
-          }
+        // Return ALL cached data - filtering happens client-side
+        if (includeApplications) {
+          return NextResponse.json({
+            applications: cachedApplications,
+            hires: cachedHires,
+            applicationsCount: cachedApplications.length,
+            hiresCount: cachedHires.length,
+            stats: cachedStats,
+            cached: true,
+            source: 'database',
+          });
+        } else {
+          return NextResponse.json({
+            hires: cachedHires,
+            count: cachedHires.length,
+            cached: true,
+            source: 'database',
+          });
         }
       }
     }
 
-    // Cache miss or expired - fetch fresh data
-    console.log('[CACHE MISS] Fetching fresh data from Recruitee API');
+    // Cache miss - geen data in database
+    // Dit zou alleen moeten gebeuren als er nog geen refresh is gedaan
+    console.log('[DATABASE MISS] No data in database. Please run Data Refresh first.');
+    return NextResponse.json(
+      { 
+        error: 'No cached data available',
+        message: 'Please click "Data Refresh" button to load data from Recruitee API first.',
+        applications: [],
+        hires: [],
+        applicationsCount: 0,
+        hiresCount: 0,
+        cached: false,
+        source: 'none',
+      },
+      { status: 200 } // Return 200 with empty data instead of error
+    );
     
     if (includeApplications) {
       const { applications, hires, stats } = await fetchAllCandidatesAndApplications(month, year);
