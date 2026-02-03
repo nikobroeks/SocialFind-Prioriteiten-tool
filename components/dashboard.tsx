@@ -67,6 +67,15 @@ export default function Dashboard() {
   });
 
   const companyHires = companyHiresData?.companyHires || {};
+  
+  // Debug: log company hires data
+  if (companyHiresData) {
+    console.log('[DASHBOARD] Company hires data:', {
+      totalHires: companyHiresData.totalHires,
+      companyCount: Object.keys(companyHires).length,
+      sampleCompanies: Object.entries(companyHires).slice(0, 5),
+    });
+  }
 
   // Combine jobs with priorities
   const vacanciesWithPriority: VacancyWithPriority[] = jobs.map((job) => {

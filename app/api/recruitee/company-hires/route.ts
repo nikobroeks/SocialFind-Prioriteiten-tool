@@ -79,10 +79,25 @@ export async function GET(request: Request) {
         // Clean up company name (remove extra spaces, etc.)
         companyName = companyName.trim();
         
+        // Normalize company name for better matching
+        // Remove common suffixes and normalize case
+        companyName = companyName
+          .replace(/\s+/g, ' ') // Multiple spaces to single space
+          .replace(/\.$/, '') // Remove trailing dot
+          .trim();
+        
         if (companyName && companyName !== 'Unknown Company') {
           companyHires[companyName] = (companyHires[companyName] || 0) + 1;
         }
       }
+    });
+
+    // Debug logging
+    console.log('[COMPANY-HIRES API] Processed hires:', {
+      totalHires: hires.length,
+      hiresInRange: Object.values(companyHires).reduce((sum, count) => sum + count, 0),
+      uniqueCompanies: Object.keys(companyHires).length,
+      sampleCompanies: Object.entries(companyHires).slice(0, 10),
     });
 
     return NextResponse.json({
