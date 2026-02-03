@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { fetchRecruiteeJobs } from '@/lib/recruitee';
 import { fetchAllCandidatesAndApplications } from '@/lib/recruitee';
+import { checkRateLimit } from '../rate-limit';
 
 // Cache duration: 5 minutes
 const CACHE_DURATION_MS = 5 * 60 * 1000;
@@ -16,6 +17,24 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
+      );
+    }
+
+    // Rate limiting: max 2 requests per 5 minutes per user
+    const rateLimit = checkRateLimit(`preload:${user.id}`, 2, 5 * 60 * 1000);
+    if (!rateLimit.allowed) {
+      return NextResponse.json(
+        { 
+          error: 'Too many requests',
+          message: `Rate limit exceeded. Please wait ${Math.ceil((rateLimit.resetAt - Date.now()) / 1000)} seconds.`,
+          resetAt: rateLimit.resetAt,
+        },
+        { 
+          status: 429,
+          headers: {
+            'Retry-After': Math.ceil((rateLimit.resetAt - Date.now()) / 1000).toString(),
+          },
+        }
       );
     }
 

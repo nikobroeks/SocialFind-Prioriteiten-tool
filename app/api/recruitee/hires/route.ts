@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { fetchRecruiteeHires, fetchAllCandidatesAndApplications } from '@/lib/recruitee';
 import { createClient } from '@/lib/supabase/server';
+import { checkRateLimit } from '../rate-limit';
 
 // Cache duration: 5 minutes
 const CACHE_DURATION_MS = 5 * 60 * 1000;
@@ -15,6 +16,25 @@ export async function GET(request: Request) {
 
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
+
+    // Rate limiting: max 20 requests per minute per user
+    if (user) {
+      const rateLimit = checkRateLimit(`hires:${user.id}`, 20, 60000);
+      if (!rateLimit.allowed) {
+        return NextResponse.json(
+          { 
+            error: 'Too many requests',
+            message: `Rate limit exceeded. Please wait ${Math.ceil((rateLimit.resetAt - Date.now()) / 1000)} seconds.`,
+          },
+          { 
+            status: 429,
+            headers: {
+              'Retry-After': Math.ceil((rateLimit.resetAt - Date.now()) / 1000).toString(),
+            },
+          }
+        );
+      }
+    }
 
     // Try to get from cache first if no date filters and cache is enabled
     if (useCache && month === undefined && year === undefined && user) {

@@ -2,16 +2,17 @@
 
 import { VacancyWithPriority, CompanyGroup } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
-import { Edit2, Building2 } from 'lucide-react';
+import { Edit2, Building2, Users } from 'lucide-react';
 import { useState } from 'react';
 import { PriorityModal } from './priority-modal';
 
 interface CompactViewProps {
   companyGroups: CompanyGroup[];
   isAdmin: boolean;
+  companyHires?: Record<string, number>;
 }
 
-export function CompactView({ companyGroups, isAdmin }: CompactViewProps) {
+export function CompactView({ companyGroups, isAdmin, companyHires = {} }: CompactViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithPriority | null>(null);
 
@@ -37,6 +38,13 @@ export function CompactView({ companyGroups, isAdmin }: CompactViewProps) {
                   <span className="text-xs text-gray-500">
                     ({group.vacancies.length} vacatures)
                   </span>
+                  {companyHires[group.company.name] !== undefined && companyHires[group.company.name] > 0 && (
+                    <div className="flex items-center gap-1 px-1.5 py-0.5 bg-green-50 border border-green-200 rounded-full">
+                      <Users className="h-3 w-3 text-green-600" />
+                      <span className="text-xs font-semibold text-green-700">{companyHires[group.company.name]}</span>
+                      <span className="text-xs text-green-600">hires</span>
+                    </div>
+                  )}
                 </div>
                 {group.companyPriority && (
                   <PriorityBadge priority={group.companyPriority} />

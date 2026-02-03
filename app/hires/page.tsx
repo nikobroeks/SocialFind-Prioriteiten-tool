@@ -79,9 +79,11 @@ export default function HiresPage() {
   const { data, isLoading, error, isFetching } = useQuery({
     queryKey: ['hires-applications', selectedMonth, selectedYear, viewMode],
     queryFn: () => fetchData(viewMode === 'year' ? undefined : selectedMonth || undefined, selectedYear, true),
-    staleTime: 5 * 60 * 1000, // Data is 5 minuten "fresh" voordat het opnieuw wordt opgehaald
-    gcTime: 10 * 60 * 1000, // Cache blijft 10 minuten bestaan
+    staleTime: 10 * 60 * 1000, // Data is 10 minuten "fresh" voordat het opnieuw wordt opgehaald
+    gcTime: 30 * 60 * 1000, // Cache blijft 30 minuten bestaan
     refetchOnWindowFocus: false, // Herhaal niet automatisch bij window focus
+    refetchOnMount: false, // Herhaal niet bij mount als data al in cache zit
+    refetchOnReconnect: false, // Herhaal niet bij reconnect
   });
 
   const allHires = data?.hires || [];

@@ -33,13 +33,22 @@ export async function GET(request: Request) {
       
       // Check if within date range
       if (hireDate >= startDate && hireDate <= endDate) {
-        // Extract company name from job title or use company field
-        const companyName = hire.company_name || 
-                          hire.job?.company_name || 
-                          hire.offer?.company_name ||
-                          'Unknown Company';
+        // Extract company name from various sources
+        // Priority: offer_company > company_name > offer_title (extract from "Company - Job")
+        let companyName = hire.offer_company ||
+                         hire.company_name || 
+                         hire.job?.company_name || 
+                         hire.offer?.company_name ||
+                         (hire.offer_title?.includes(' - ') ? hire.offer_title.split(' - ')[0] : null) ||
+                         (hire.job_title?.includes(' - ') ? hire.job_title.split(' - ')[0] : null) ||
+                         'Unknown Company';
         
-        companyHires[companyName] = (companyHires[companyName] || 0) + 1;
+        // Clean up company name (remove extra spaces, etc.)
+        companyName = companyName.trim();
+        
+        if (companyName && companyName !== 'Unknown Company') {
+          companyHires[companyName] = (companyHires[companyName] || 0) + 1;
+        }
       }
     });
 

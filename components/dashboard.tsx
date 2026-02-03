@@ -40,9 +40,13 @@ export default function Dashboard() {
   const { data: priorities = [], isLoading: prioritiesLoading } = useQuery({
     queryKey: ['priorities'],
     queryFn: getAllPriorities,
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    gcTime: 30 * 60 * 1000, // 30 minutes cache
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
   });
 
-  // Fetch company hires (last 90 days)
+  // Fetch company hires (last 90 days) - heavily cached
   const { data: companyHiresData } = useQuery({
     queryKey: ['company-hires-90d'],
     queryFn: async () => {
@@ -50,7 +54,11 @@ export default function Dashboard() {
       if (!response.ok) throw new Error('Failed to fetch company hires');
       return response.json();
     },
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 15 * 60 * 1000, // 15 minutes - hires don't change that often
+    gcTime: 60 * 60 * 1000, // 1 hour cache
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
   });
 
   const companyHires = companyHiresData?.companyHires || {};
@@ -281,7 +289,8 @@ export default function Dashboard() {
             // Compact View - Company groups in compact format
             <CompactView 
               companyGroups={companyGroupsWithPriority} 
-              isAdmin={userRole === 'admin'} 
+              isAdmin={userRole === 'admin'}
+              companyHires={companyHires}
             />
           ) : (
             // Table View - Original table view per company
@@ -310,11 +319,11 @@ export default function Dashboard() {
                         <p className="text-sm text-gray-500">
                           {group.vacancies.length} vacature{group.vacancies.length !== 1 ? 's' : ''}
                         </p>
-                        {companyHires[group.company.name] !== undefined && (
-                          <div className="flex items-center gap-1 text-sm text-green-600">
-                            <Users className="h-3 w-3" />
-                            <span className="font-semibold">{companyHires[group.company.name]}</span>
-                            <span className="text-gray-500">hires (90d)</span>
+                        {companyHires[group.company.name] !== undefined && companyHires[group.company.name] > 0 && (
+                          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
+                            <Users className="h-3 w-3 text-green-600" />
+                            <span className="text-xs font-semibold text-green-700">{companyHires[group.company.name]}</span>
+                            <span className="text-xs text-green-600">hires (90d)</span>
                           </div>
                         )}
                       </div>

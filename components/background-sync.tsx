@@ -5,15 +5,50 @@ import { useEffect, useRef } from 'react';
 /**
  * Component that automatically syncs Recruitee data every 5 minutes
  * when the user is on the application
+ * Includes rate limiting to prevent too many requests
  */
 export function BackgroundSync() {
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isActiveRef = useRef(true);
+  const lastSyncRef = useRef<number>(0);
+  const syncInProgressRef = useRef(false);
 
   useEffect(() => {
-    // Function to trigger preload
+    // Function to trigger preload with rate limiting
     const syncData = async () => {
-      if (!isActiveRef.current) return;
+      if (!isActiveRef.current || syncInProgressRef.current) return;
+      
+      // Rate limiting: don't sync more than once per 4 minutes
+      const now = Date.now();
+      const timeSinceLastSync = now - lastSyncRef.current;
+      const MIN_SYNC_INTERVAL = 4 * 60 * 1000; // 4 minutes minimum
+
+      if (timeSinceLastSync < MIN_SYNC_INTERVAL) {
+        console.log(`[BACKGROUND SYNC] Rate limited. Next sync in ${Math.ceil((MIN_SYNC_INTERVAL - timeSinceLastSync) / 1000)}s`);
+        return;
+      }
+
+      // Check if cache is still fresh before syncing
+      try {
+        const cacheCheck = await fetch('/api/recruitee/preload');
+        if (cacheCheck.ok) {
+          const cacheData = await cacheCheck.json();
+          if (cacheData.cached && cacheData.valid) {
+            const ageMinutes = cacheData.age_minutes || 0;
+            // If cache is less than 3 minutes old, skip sync
+            if (ageMinutes < 3) {
+              console.log(`[BACKGROUND SYNC] Cache still fresh (${ageMinutes} min old), skipping sync`);
+              lastSyncRef.current = now;
+              return;
+            }
+          }
+        }
+      } catch (err) {
+        console.warn('[BACKGROUND SYNC] Cache check failed, proceeding with sync');
+      }
+
+      syncInProgressRef.current = true;
+      lastSyncRef.current = now;
       
       try {
         console.log('[BACKGROUND SYNC] Starting sync...');
@@ -34,13 +69,15 @@ export function BackgroundSync() {
         }
       } catch (error) {
         console.error('[BACKGROUND SYNC] Sync error:', error);
+      } finally {
+        syncInProgressRef.current = false;
       }
     };
 
-    // Initial sync after 30 seconds (to not interfere with initial page load)
+    // Initial sync after 60 seconds (to not interfere with initial page load)
     const initialTimer = setTimeout(() => {
       syncData();
-    }, 30000);
+    }, 60000); // 60 seconds
 
     // Then sync every 5 minutes
     intervalRef.current = setInterval(() => {
