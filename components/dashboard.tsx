@@ -129,8 +129,18 @@ export default function Dashboard() {
   
   // Debug logging will be done after companyGroupsWithPriority is created
 
-  // Combine jobs with priorities
-  const vacanciesWithPriority: VacancyWithPriority[] = jobs.map((job) => {
+  // Filter jobs based on visibility settings
+  // Default: all jobs are visible unless explicitly hidden
+  const visibleJobs = jobs.filter((job) => {
+    const visibilitySetting = jobVisibility.find(
+      v => v.recruitee_job_id === job.id && v.recruitee_company_id === job.company_id
+    );
+    // If no setting exists, job is visible by default
+    return visibilitySetting?.is_visible !== false;
+  });
+
+  // Combine visible jobs with priorities
+  const vacanciesWithPriority: VacancyWithPriority[] = visibleJobs.map((job) => {
     const priority = priorities.find(
       (p) =>
         p.recruitee_job_id === job.id &&
@@ -448,6 +458,17 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+
+      {/* Company Jobs Modal */}
+      {selectedCompany && (
+        <CompanyJobsModal
+          isOpen={!!selectedCompany}
+          onClose={() => setSelectedCompany(null)}
+          companyName={selectedCompany.name}
+          companyId={selectedCompany.id}
+          jobs={selectedCompany.jobs}
+        />
+      )}
     </div>
   );
 }
