@@ -76,11 +76,13 @@ export default function HiresPage() {
   const [activeTab, setActiveTab] = useState<'hires' | 'applications'>('hires');
   const [collapsedCompanies, setCollapsedCompanies] = useState<Set<string>>(new Set());
 
+  // ALTIJD dezelfde queryKey gebruiken - data komt uit database, filtering is client-side
+  // Dit voorkomt dat er nieuwe API calls worden gedaan bij maand/jaar wijzigingen
   const { data, isLoading, error, isFetching } = useQuery({
-    queryKey: ['hires-applications', selectedMonth, selectedYear, viewMode],
-    queryFn: () => fetchData(viewMode === 'year' ? undefined : selectedMonth || undefined, selectedYear, true),
-    staleTime: 15 * 60 * 1000, // Data is 15 minuten "fresh" voordat het opnieuw wordt opgehaald
-    gcTime: 60 * 60 * 1000, // Cache blijft 60 minuten bestaan
+    queryKey: ['hires-applications-all'], // Fixed key - altijd dezelfde data uit cache
+    queryFn: () => fetchData(undefined, undefined, true), // Haal ALLE data op (geen filters)
+    staleTime: 60 * 60 * 1000, // 60 minuten - data blijft lang "fresh"
+    gcTime: 24 * 60 * 60 * 1000, // 24 uur cache
     refetchOnWindowFocus: false, // Herhaal niet automatisch bij window focus
     refetchOnMount: false, // Herhaal niet bij mount als data al in cache zit
     refetchOnReconnect: false, // Herhaal niet bij reconnect
@@ -153,15 +155,23 @@ export default function HiresPage() {
   }, {});
 
   // Bereken maandelijkse statistieken voor jaar overzicht
+  // Gebruik ALLE hires/applications (niet alleen gefilterde) voor jaar overzicht
   const monthlyStats = monthNames.map((monthName, monthIndex) => {
-    const monthHires = hires.filter((hire: Hire) => {
-      const dateStr = hire.hired_at || hire.updated_at;
+    const monthHires = allHires.filter((hire: Hire) => {
+      const hireAny = hire as any;
+      const placements = hireAny.placements || [];
+      
+      // Gebruik placement.hired_at eerst, dan hire.hired_at, dan updated_at
+      const dateStr = (placements.length > 0 && placements[0].hired_at) 
+                    || hire.hired_at 
+                    || hire.updated_at;
+      
       if (!dateStr || typeof dateStr !== 'string') return false;
       const date = new Date(dateStr);
       return date.getMonth() === monthIndex && date.getFullYear() === selectedYear;
     });
     
-    const monthApplications = applications.filter((app: Application) => {
+    const monthApplications = allApplications.filter((app: Application) => {
       const dateStr = app.created_at || app.updated_at;
       if (!dateStr || typeof dateStr !== 'string') return false;
       const date = new Date(dateStr);

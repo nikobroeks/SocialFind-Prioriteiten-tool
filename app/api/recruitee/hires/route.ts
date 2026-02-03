@@ -85,30 +85,12 @@ export async function GET(request: Request) {
         hires: [],
         applicationsCount: 0,
         hiresCount: 0,
+        stats: null,
         cached: false,
         source: 'none',
       },
       { status: 200 } // Return 200 with empty data instead of error
     );
-    
-    if (includeApplications) {
-      const { applications, hires, stats } = await fetchAllCandidatesAndApplications(month, year);
-      return NextResponse.json({ 
-        applications, 
-        hires, 
-        applicationsCount: applications.length,
-        hiresCount: hires.length,
-        stats,
-        cached: false,
-      });
-    } else {
-      const hires = await fetchRecruiteeHires(month, year);
-      return NextResponse.json({ 
-        hires, 
-        count: hires.length,
-        cached: false,
-      });
-    }
   } catch (error: any) {
     console.error('Error in /api/recruitee/hires:', error);
     return NextResponse.json(
