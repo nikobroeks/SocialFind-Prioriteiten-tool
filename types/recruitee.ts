@@ -35,3 +35,28 @@ export interface RecruiteeApiResponse {
   };
 }
 
+export interface RecruiteeCandidate {
+  id: number;
+  name: string;
+  emails?: string[];
+  phones?: string[];
+  created_at: string;
+  updated_at: string;
+  hired_at?: string; // Datum wanneer candidate is aangenomen
+  offer_id?: number; // ID van de vacature waar deze candidate voor is aangenomen
+  stage?: {
+    id: number;
+    name: string;
+    category?: string; // Bijv. "hire" voor aangenomen candidates
+  };
+  [key: string]: unknown;
+}
+
+export interface RecruiteeCandidatesResponse {
+  candidates?: RecruiteeCandidate[];
+  meta?: {
+    total: number;
+    page: number;
+    per_page: number;
+  };
+}

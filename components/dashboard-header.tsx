@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, Briefcase } from 'lucide-react';
+import { Building2, Briefcase, TrendingUp } from 'lucide-react';
 import { LogoutButton } from './logout-button';
 import Image from 'next/image';
 
@@ -15,7 +15,7 @@ export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHea
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14">
           {/* Logo & Title */}
-          <div className="flex items-center gap-3">
+          <a href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <div className="flex items-center gap-3">
               <div className="relative w-10 h-10 flex-shrink-0">
                 <Image
@@ -31,7 +31,7 @@ export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHea
                 <p className="text-xs text-gray-500 -mt-0.5">Prioriteiten Dashboard</p>
               </div>
             </div>
-          </div>
+          </a>
 
           {/* Stats */}
           <div className="hidden md:flex items-center gap-4">
@@ -51,6 +51,13 @@ export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHea
 
           {/* Actions */}
           <div className="flex items-center gap-3">
+            <a
+              href="/hires"
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200"
+            >
+              <TrendingUp className="h-4 w-4" />
+              Hires
+            </a>
             <LogoutButton />
           </div>
         </div>
