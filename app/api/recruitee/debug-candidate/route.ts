@@ -12,11 +12,78 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: 'Missing credentials' });
   }
 
+  const { searchParams } = new URL(request.url);
+  const candidateId = searchParams.get('id') || '111573940'; // Nico Reinders default
+
   const results: any = {
+    candidateId: candidateId,
     tests: [],
   };
 
   try {
+    // Test 0: Haal specifieke candidate op (Nico Reinders)
+    console.log(`[DEBUG] Fetching candidate ${candidateId}...`);
+    try {
+      const candidateResponse = await fetch(
+        `${RECRUITEE_API_BASE_URL}/c/${RECRUITEE_COMPANY_ID}/candidates/${candidateId}`,
+        {
+          headers: {
+            'Authorization': `Bearer ${RECRUITEE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (candidateResponse.ok) {
+        const candidateData = await candidateResponse.json();
+        results.nicoReinders = {
+          fullResponse: candidateData,
+          candidate: candidateData.candidate,
+          references: candidateData.references,
+          candidateKeys: candidateData.candidate ? Object.keys(candidateData.candidate) : [],
+          referencesCount: candidateData.references?.length || 0,
+          // Check alle hire-gerelateerde velden
+          hireFields: {
+            isHired: candidateData.candidate?.isHired,
+            hired_at: candidateData.candidate?.hired_at,
+            placements: candidateData.candidate?.placements,
+            placementsCount: candidateData.candidate?.placements?.length || 0,
+            current_placement: candidateData.candidate?.current_placement,
+            stage: candidateData.candidate?.stage,
+            current_stage: candidateData.candidate?.current_stage,
+            status: candidateData.candidate?.status,
+            state: candidateData.candidate?.state,
+          },
+          // Check placements in detail
+          placementsDetail: candidateData.candidate?.placements?.map((p: any, idx: number) => ({
+            index: idx,
+            id: p.id,
+            offerId: p.offerId,
+            offer_id: p.offer_id,
+            stageId: p.stageId,
+            stage_id: p.stage_id,
+            stage: p.stage,
+            hiredAt: p.hiredAt,
+            hired_at: p.hired_at,
+            hiredInThisPlacement: p.hiredInThisPlacement,
+            allKeys: Object.keys(p),
+          })) || [],
+          // Check references voor stages
+          stageReferences: candidateData.references?.filter((r: any) => r.type === 'Stage') || [],
+        };
+      } else {
+        const errorText = await candidateResponse.text();
+        results.nicoReinders = {
+          error: `Failed to fetch candidate: ${candidateResponse.status}`,
+          errorText: errorText,
+        };
+      }
+    } catch (error: any) {
+      results.nicoReinders = {
+        error: error.message,
+      };
+    }
+
     // Test 1: Haal een offer op om te zien welke velden het heeft
     const offersResponse = await fetch(
       `${RECRUITEE_API_BASE_URL}/c/${RECRUITEE_COMPANY_ID}/offers?status=published&per_page=1`,
@@ -61,15 +128,31 @@ export async function GET(request: Request) {
             : candidatesData.data?.candidates || [];
 
           if (candidates.length > 0) {
+            const sample = candidates[0];
             results.candidateFromOffer = {
-              sample: candidates[0],
-              allKeys: Object.keys(candidates[0]),
-              hasOfferId: !!candidates[0].offer_id,
-              hasOffer: !!candidates[0].offer,
-              hasOffers: !!candidates[0].offers,
-              offerId: candidates[0].offer_id,
-              offer: candidates[0].offer,
-              offers: candidates[0].offers,
+              sample: sample,
+              allKeys: Object.keys(sample),
+              hasOfferId: !!sample.offer_id,
+              hasOffer: !!sample.offer,
+              hasOffers: !!sample.offers,
+              offerId: sample.offer_id,
+              offer: sample.offer,
+              offers: sample.offers,
+              stage: sample.stage,
+              stageName: sample.stage?.name,
+              stageCategory: sample.stage?.category,
+              stageId: sample.stage?.id,
+              hiredAt: sample.hired_at,
+              hasHiredAt: !!sample.hired_at,
+              // Check alle mogelijke stage velden
+              allStageFields: {
+                stage: sample.stage,
+                current_stage: (sample as any).current_stage,
+                stage_id: (sample as any).stage_id,
+                stage_name: (sample as any).stage_name,
+                status: (sample as any).status,
+                state: (sample as any).state,
+              },
             };
           }
         }
@@ -96,15 +179,31 @@ export async function GET(request: Request) {
         : directCandidatesData.data?.candidates || [];
 
       if (directCandidates.length > 0) {
+        const sample = directCandidates[0];
         results.directCandidate = {
-          sample: directCandidates[0],
-          allKeys: Object.keys(directCandidates[0]),
-          hasOfferId: !!directCandidates[0].offer_id,
-          hasOffer: !!directCandidates[0].offer,
-          hasOffers: !!directCandidates[0].offers,
-          offerId: directCandidates[0].offer_id,
-          offer: directCandidates[0].offer,
-          offers: directCandidates[0].offers,
+          sample: sample,
+          allKeys: Object.keys(sample),
+          hasOfferId: !!sample.offer_id,
+          hasOffer: !!sample.offer,
+          hasOffers: !!sample.offers,
+          offerId: sample.offer_id,
+          offer: sample.offer,
+          offers: sample.offers,
+          stage: sample.stage,
+          stageName: sample.stage?.name,
+          stageCategory: sample.stage?.category,
+          stageId: sample.stage?.id,
+          hiredAt: sample.hired_at,
+          hasHiredAt: !!sample.hired_at,
+          // Check alle mogelijke stage velden
+          allStageFields: {
+            stage: sample.stage,
+            current_stage: (sample as any).current_stage,
+            stage_id: (sample as any).stage_id,
+            stage_name: (sample as any).stage_name,
+            status: (sample as any).status,
+            state: (sample as any).state,
+          },
         };
       }
     }

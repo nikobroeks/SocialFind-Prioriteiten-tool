@@ -14,7 +14,7 @@ import { KanbanView } from './kanban-view';
 import { CompactView } from './compact-view';
 import { useState, useEffect } from 'react';
 import { getUserRole } from '@/lib/supabase/queries';
-import { Building2, TrendingUp, AlertCircle } from 'lucide-react';
+import { Building2, TrendingUp, AlertCircle, Users } from 'lucide-react';
 
 export default function Dashboard() {
   const [userRole, setUserRole] = useState<'admin' | 'viewer' | null>(null);
@@ -41,6 +41,19 @@ export default function Dashboard() {
     queryKey: ['priorities'],
     queryFn: getAllPriorities,
   });
+
+  // Fetch company hires (last 90 days)
+  const { data: companyHiresData } = useQuery({
+    queryKey: ['company-hires-90d'],
+    queryFn: async () => {
+      const response = await fetch('/api/recruitee/company-hires?days=90');
+      if (!response.ok) throw new Error('Failed to fetch company hires');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+  });
+
+  const companyHires = companyHiresData?.companyHires || {};
 
   // Combine jobs with priorities
   const vacanciesWithPriority: VacancyWithPriority[] = jobs.map((job) => {
@@ -293,9 +306,18 @@ export default function Dashboard() {
                     </div>
                     <div>
                       <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
-                      <p className="text-sm text-gray-500 mt-0.5">
-                        {group.vacancies.length} vacature{group.vacancies.length !== 1 ? 's' : ''}
-                      </p>
+                      <div className="flex items-center gap-4 mt-0.5">
+                        <p className="text-sm text-gray-500">
+                          {group.vacancies.length} vacature{group.vacancies.length !== 1 ? 's' : ''}
+                        </p>
+                        {companyHires[group.company.name] !== undefined && (
+                          <div className="flex items-center gap-1 text-sm text-green-600">
+                            <Users className="h-3 w-3" />
+                            <span className="font-semibold">{companyHires[group.company.name]}</span>
+                            <span className="text-gray-500">hires (90d)</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <PriorityBadge priority={group.companyPriority || 'Green'} />

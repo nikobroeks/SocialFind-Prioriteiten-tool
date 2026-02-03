@@ -98,6 +98,14 @@ export default function LoginPage() {
       // Wacht nog even zodat cookies worden gezet
       await new Promise(resolve => setTimeout(resolve, 500));
 
+      // Start background data preload (niet wachten op resultaat)
+      fetch('/api/recruitee/preload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      }).catch(err => {
+        console.error('Preload error (non-blocking):', err);
+      });
+
       // Forceer een volledige page reload om de session te synchroniseren
       // Dit zorgt ervoor dat de middleware de nieuwe session ziet
       window.location.href = '/';

@@ -3,7 +3,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { DashboardHeader } from '@/components/dashboard-header';
-import { Calendar, TrendingUp, Users, Briefcase, ChevronDown, ChevronUp } from 'lucide-react';
+import { Calendar, TrendingUp, Users, Briefcase, ChevronDown, ChevronUp, BarChart3, PieChart } from 'lucide-react';
 
 interface Hire {
   id: number;
@@ -23,11 +23,32 @@ interface Hire {
 
 interface Application extends Hire {}
 
+interface HireStats {
+  totalCandidates: number;
+  hiresFound: number;
+  notFound: number;
+  byHiredAt: number;
+  byStageId: number;
+  byPlacementStageId: number;
+  byCurrentPlacementStageId: number;
+  byStageCategory: number;
+  byPlacementCategory: number;
+  byStageName: number;
+  byPlacementStageName: number;
+  noMatchSample: Array<{
+    id: number;
+    name: string;
+    reason: string;
+    data: any;
+  }>;
+}
+
 async function fetchData(month?: number, year?: number, includeApplications = true): Promise<{ 
   applications: Application[]; 
   hires: Hire[];
   applicationsCount: number;
   hiresCount: number;
+  stats?: HireStats;
 }> {
   let url = '/api/recruitee/hires?include_applications=true';
   if (month !== undefined && year !== undefined) {
@@ -65,13 +86,30 @@ export default function HiresPage() {
 
   const allHires = data?.hires || [];
   const allApplications = data?.applications || [];
+  const stats = data?.stats;
   
-  // Filter op jaar (client-side extra check)
+  // Filter op jaar/maand (client-side extra check) - gebruik placement.hired_at eerst!
   const hires = allHires.filter((hire: Hire) => {
-    const dateStr = hire.hired_at || hire.updated_at;
+    const hireAny = hire as any;
+    const placements = hireAny.placements || [];
+    
+    // Gebruik placement.hired_at eerst, dan hire.hired_at, dan updated_at
+    const dateStr = (placements.length > 0 && placements[0].hired_at) 
+                  || hire.hired_at 
+                  || hire.updated_at;
+    
     if (!dateStr || typeof dateStr !== 'string') return false;
     const date = new Date(dateStr);
-    return date.getFullYear() === selectedYear;
+    
+    // Filter altijd op jaar
+    const yearMatches = date.getFullYear() === selectedYear;
+    
+    // Als maand view is geselecteerd, filter ook op maand
+    if (viewMode === 'month' && selectedMonth !== null) {
+      return yearMatches && date.getMonth() === selectedMonth;
+    }
+    
+    return yearMatches;
   });
 
   const applications = allApplications.filter((app: Application) => {
@@ -337,17 +375,359 @@ export default function HiresPage() {
 
         {/* Error State */}
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl">
-            <p className="font-semibold mb-2">Fout bij ophalen van hires:</p>
+          <div className="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-xl mb-6">
+            <p className="font-semibold mb-2">Fout bij ophalen van data:</p>
             <p className="text-sm">{String(error)}</p>
+            <p className="text-xs mt-2 text-red-600">
+              Tip: Check de server console logs voor meer informatie over stage detectie
+            </p>
           </div>
         )}
 
-        {/* Data List */}
+
+        {/* Charts Section - Professional Design */}
         {!isLoading && !error && (
           <div className="space-y-6">
+            {/* Monthly Trend Bar Chart - Professional */}
+            {viewMode === 'year' && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                <div className="mb-8">
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">Maandelijkse Trend</h3>
+                  <p className="text-sm text-gray-500">Overzicht van {activeTab === 'hires' ? 'hires' : 'sollicitaties'} per maand in {selectedYear}</p>
+                </div>
+                
+                <div className="relative">
+                  {/* Y-axis labels - Dynamic based on actual max value */}
+                  <div className="absolute left-0 top-0 bottom-8 w-12 flex flex-col justify-between text-xs text-gray-500 pr-2">
+                    {(() => {
+                      const maxValue = Math.max(...monthlyStats.map(s => activeTab === 'hires' ? s.hires : s.applications), 1);
+                      // Round up to nearest nice number (1, 2, 5, 10, 20, 50, 100, etc.)
+                      const getNiceMax = (max: number) => {
+                        if (max === 0) return 1;
+                        const magnitude = Math.pow(10, Math.floor(Math.log10(max)));
+                        const normalized = max / magnitude;
+                        let nice;
+                        if (normalized <= 1) nice = 1;
+                        else if (normalized <= 2) nice = 2;
+                        else if (normalized <= 5) nice = 5;
+                        else nice = 10;
+                        return nice * magnitude;
+                      };
+                      const niceMax = getNiceMax(maxValue);
+                      const steps = 5;
+                      const stepValue = niceMax / steps;
+                      return Array.from({ length: steps + 1 }, (_, i) => steps - i).map(i => {
+                        const labelValue = Math.round(i * stepValue);
+                        return (
+                          <div key={i} className="text-right">{labelValue}</div>
+                        );
+                      });
+                    })()}
+                  </div>
+                  
+                  {/* Chart area */}
+                  <div className="ml-14">
+                    <div className="relative h-64">
+                      {/* Grid lines - More visible */}
+                      {Array.from({ length: 6 }).map((_, i) => (
+                        <div key={i} className="absolute inset-x-0 border-t-2 border-gray-300" style={{ top: `${(i / 5) * 100}%` }} />
+                      ))}
+                      
+                      {/* Bars container */}
+                      <div className="absolute inset-0 grid grid-cols-12 gap-3 items-end">
+                        {(() => {
+                          const maxValue = Math.max(...monthlyStats.map(s => activeTab === 'hires' ? s.hires : s.applications), 1);
+                          // Round up to nearest nice number for scaling
+                          const getNiceMax = (max: number) => {
+                            if (max === 0) return 1;
+                            const magnitude = Math.pow(10, Math.floor(Math.log10(max)));
+                            const normalized = max / magnitude;
+                            let nice;
+                            if (normalized <= 1) nice = 1;
+                            else if (normalized <= 2) nice = 2;
+                            else if (normalized <= 5) nice = 5;
+                            else nice = 10;
+                            return nice * magnitude;
+                          };
+                          const niceMax = getNiceMax(maxValue);
+                          
+                          return monthlyStats.map((stat, idx) => {
+                            const value = activeTab === 'hires' ? stat.hires : stat.applications;
+                            const height = niceMax > 0 ? (value / niceMax) * 100 : 0;
+                            const barHeight = value > 0 ? Math.max(height, 2) : 0; // Minimum 2% height if value > 0
+                            
+                            return (
+                              <div key={idx} className="flex flex-col items-center group z-10 h-full">
+                                <div className="relative w-full h-full flex flex-col items-end justify-end">
+                                  {/* Bar */}
+                                  {value > 0 && (
+                                    <div 
+                                      className={`w-full rounded-t-lg transition-all duration-300 cursor-pointer ${
+                                        activeTab === 'hires'
+                                          ? 'bg-gradient-to-t from-green-600 via-green-500 to-green-400 hover:from-green-700 hover:via-green-600 hover:to-green-500'
+                                          : 'bg-gradient-to-t from-blue-600 via-blue-500 to-blue-400 hover:from-blue-700 hover:via-blue-600 hover:to-blue-500'
+                                      } shadow-sm hover:shadow-md group-hover:scale-105`}
+                                      style={{ 
+                                        height: `${barHeight}%`,
+                                        minHeight: '8px'
+                                      }}
+                                    >
+                                      {/* Value label on hover */}
+                                      <div className="absolute -top-8 left-1/2 transform -translate-x-1/2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-20">
+                                        <div className="bg-gray-900 text-white text-xs font-semibold px-2 py-1 rounded whitespace-nowrap">
+                                          {value}
+                                        </div>
+                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 border-4 border-transparent border-t-gray-900" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                                
+                                {/* Month label */}
+                                <div className="mt-2 text-xs font-medium text-gray-600 text-center">
+                                  {stat.month.substring(0, 3)}
+                                </div>
+                                {/* Value below bar */}
+                                <div className="mt-1 text-xs font-bold text-gray-900">
+                                  {value}
+                                </div>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Company Distribution - Modern Donut Chart */}
+            {(Object.keys(activeTab === 'hires' ? hiresByCompany : applicationsByCompany).length > 0) && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                <div className="mb-8">
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">Verdeling per Bedrijf</h3>
+                  <p className="text-sm text-gray-500">Top bedrijven met {activeTab === 'hires' ? 'hires' : 'sollicitaties'}</p>
+                </div>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  {/* Donut Chart */}
+                  <div className="lg:col-span-1 flex items-center justify-center">
+                    <div className="relative w-64 h-64">
+                      <svg viewBox="0 0 120 120" className="transform -rotate-90 w-full h-full">
+                        {/* Background circle */}
+                        <circle
+                          cx="60"
+                          cy="60"
+                          r="50"
+                          fill="none"
+                          stroke="#f3f4f6"
+                          strokeWidth="20"
+                        />
+                        
+                        {(() => {
+                          const companies = Object.entries(activeTab === 'hires' ? hiresByCompany : applicationsByCompany)
+                            .sort(([, a], [, b]) => (b as number) - (a as number));
+                          const total = activeTab === 'hires' ? totalHires : totalApplications;
+                          let currentAngle = 0;
+                          // Generate colors dynamically for all companies
+                          const baseColors = [
+                            '#f97316', // orange
+                            '#3b82f6', // blue
+                            '#22c55e', // green
+                            '#a855f7', // purple
+                            '#ec4899', // pink
+                            '#6366f1', // indigo
+                            '#ef4444', // red
+                            '#10b981', // emerald
+                            '#f59e0b', // amber
+                            '#8b5cf6', // violet
+                            '#06b6d4', // cyan
+                            '#ec4899', // pink
+                          ];
+                          const colors = companies.map((_, idx) => baseColors[idx % baseColors.length]);
+                          
+                          return companies.map(([company, count], idx) => {
+                            const percentage = total > 0 ? ((count as number) / total) * 100 : 0;
+                            const angle = (percentage / 100) * 360;
+                            const startAngle = currentAngle;
+                            const endAngle = currentAngle + angle;
+                            currentAngle += angle;
+                            
+                            const x1 = 60 + 50 * Math.cos((startAngle * Math.PI) / 180);
+                            const y1 = 60 + 50 * Math.sin((startAngle * Math.PI) / 180);
+                            const x2 = 60 + 50 * Math.cos((endAngle * Math.PI) / 180);
+                            const y2 = 60 + 50 * Math.sin((endAngle * Math.PI) / 180);
+                            const largeArc = angle > 180 ? 1 : 0;
+                            
+                            return (
+                              <g key={company} className="group cursor-pointer">
+                                <path
+                                  d={`M 60 60 L ${x1} ${y1} A 50 50 0 ${largeArc} 1 ${x2} ${y2} Z`}
+                                  fill={colors[idx % colors.length]}
+                                  className="opacity-90 group-hover:opacity-100 transition-opacity"
+                                />
+                                <title>{`${company}: ${count} (${percentage.toFixed(1)}%)`}</title>
+                              </g>
+                            );
+                          });
+                        })()}
+                      </svg>
+                      
+                    </div>
+                  </div>
+                  
+                  {/* Legend - Better styled */}
+                  <div className="lg:col-span-2 space-y-3 max-h-96 overflow-y-auto">
+                    {Object.entries(activeTab === 'hires' ? hiresByCompany : applicationsByCompany)
+                      .sort(([, a], [, b]) => (b as number) - (a as number))
+                      .map(([company, count], idx) => {
+                        const baseColors = [
+                          'bg-orange-500',
+                          'bg-blue-500',
+                          'bg-green-500',
+                          'bg-purple-500',
+                          'bg-pink-500',
+                          'bg-indigo-500',
+                          'bg-red-500',
+                          'bg-emerald-500',
+                          'bg-amber-500',
+                          'bg-violet-500',
+                          'bg-cyan-500',
+                          'bg-rose-500',
+                        ];
+                        const colors = baseColors;
+                        const total = activeTab === 'hires' ? totalHires : totalApplications;
+                        const percentage = total > 0 ? ((count as number) / total) * 100 : 0;
+                        
+                        return (
+                          <div key={company} className="flex items-center gap-4 p-3 rounded-lg hover:bg-gray-50 transition-colors">
+                            <div className={`w-5 h-5 rounded ${colors[idx % colors.length]} flex-shrink-0 shadow-sm`} />
+                            <div className="flex-1 min-w-0">
+                              <div className="font-semibold text-gray-900 truncate" title={company}>
+                                {company}
+                              </div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                {percentage.toFixed(1)}% van totaal
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-xl font-bold text-gray-900">
+                                {count}
+                              </div>
+                              <div className="text-xs text-gray-500">
+                                {activeTab === 'hires' ? 'hires' : 'sollicitaties'}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Monthly Comparison - Clean Design */}
+            {viewMode === 'month' && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-8">
+                <div className="mb-8">
+                  <h3 className="text-xl font-bold text-gray-900 mb-1">Trend Overzicht</h3>
+                  <p className="text-sm text-gray-500">Vergelijking met voorgaande maanden</p>
+                </div>
+                
+                <div className="space-y-3">
+                  {monthlyStats
+                    .filter((_, idx) => idx <= (selectedMonth ?? 0))
+                    .slice(-6)
+                    .map((stat, idx, arr) => {
+                      const value = activeTab === 'hires' ? stat.hires : stat.applications;
+                      const maxValue = Math.max(...arr.map(s => activeTab === 'hires' ? s.hires : s.applications), 1);
+                      const percentage = maxValue > 0 ? (value / maxValue) * 100 : 0;
+                      const isCurrentMonth = idx === arr.length - 1;
+                      const prevValue = idx > 0 ? (activeTab === 'hires' ? arr[idx - 1].hires : arr[idx - 1].applications) : null;
+                      const change = prevValue !== null ? value - prevValue : null;
+                      
+                      return (
+                        <div key={idx} className={`p-4 rounded-xl border-2 transition-all ${
+                          isCurrentMonth 
+                            ? 'border-orange-500 bg-gradient-to-r from-orange-50 to-white shadow-sm' 
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}>
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-3">
+                              <span className={`text-sm font-semibold ${
+                                isCurrentMonth ? 'text-orange-900' : 'text-gray-700'
+                              }`}>
+                                {stat.month}
+                              </span>
+                              {change !== null && change !== 0 && (
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                                  change > 0 
+                                    ? 'bg-green-100 text-green-700' 
+                                    : 'bg-red-100 text-red-700'
+                                }`}>
+                                  {change > 0 ? '↑' : '↓'} {Math.abs(change)}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-right">
+                              <div className={`text-2xl font-bold ${
+                                isCurrentMonth ? 'text-orange-600' : 'text-gray-900'
+                              }`}>
+                                {value}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="w-full bg-gray-100 rounded-full h-3 overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-500 ${
+                                isCurrentMonth 
+                                  ? 'bg-gradient-to-r from-orange-500 to-orange-600' 
+                                  : activeTab === 'hires'
+                                  ? 'bg-gradient-to-r from-green-400 to-green-500'
+                                  : 'bg-gradient-to-r from-blue-400 to-blue-500'
+                              }`}
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
+
+            {/* Empty State */}
+            {activeTab === 'hires' && totalHires === 0 && (
+              <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200">
+                <Users className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">
+                  Geen hires gevonden voor{' '}
+                  {viewMode === 'month' && selectedMonth !== null
+                    ? `${monthNames[selectedMonth]} ${selectedYear}`
+                    : `jaar ${selectedYear}`}
+                </p>
+              </div>
+            )}
+
+            {activeTab === 'applications' && totalApplications === 0 && (
+              <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200">
+                <Briefcase className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+                <p className="text-gray-600">
+                  Geen sollicitaties gevonden voor{' '}
+                  {viewMode === 'month' && selectedMonth !== null
+                    ? `${monthNames[selectedMonth]} ${selectedYear}`
+                    : `jaar ${selectedYear}`}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* OLD DATA LIST - REMOVED */}
+        {false && !isLoading && !error && (
+          <div className="space-y-6">
             {activeTab === 'hires' ? (
-              /* Hires by Company */
               Object.keys(hiresByCompany).length > 0 ? (
                 Object.entries(hiresByCompany)
                   .sort(([, a], [, b]) => (b as number) - (a as number))
@@ -448,7 +828,7 @@ export default function HiresPage() {
                   <p className="text-gray-600">
                     Geen hires gevonden voor{' '}
                     {viewMode === 'month' && selectedMonth !== null
-                      ? `${monthNames[selectedMonth]} ${selectedYear}`
+                      ? `${monthNames[selectedMonth!]} ${selectedYear}`
                       : `jaar ${selectedYear}`}
                   </p>
                 </div>
@@ -555,7 +935,7 @@ export default function HiresPage() {
                   <p className="text-gray-600">
                     Geen sollicitaties gevonden voor{' '}
                     {viewMode === 'month' && selectedMonth !== null
-                      ? `${monthNames[selectedMonth]} ${selectedYear}`
+                      ? `${monthNames[selectedMonth!]} ${selectedYear}`
                       : `jaar ${selectedYear}`}
                   </p>
                 </div>

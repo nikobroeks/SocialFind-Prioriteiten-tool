@@ -49,12 +49,6 @@ export async function fetchRecruiteeJobs(
     
     // Recruitee gebruikt "offers" endpoint, niet "jobs"
     const url = `${RECRUITEE_API_BASE_URL}/c/${RECRUITEE_COMPANY_ID}/offers?status=${status}&page=${page}&per_page=${perPage}`;
-    
-    console.log('Recruitee API Request:', {
-      url: url.replace(RECRUITEE_API_KEY!, '***'),
-      companyId: RECRUITEE_COMPANY_ID,
-      hasApiKey: !!RECRUITEE_API_KEY,
-    });
 
     const response = await fetch(url, {
       headers: {
@@ -91,22 +85,6 @@ export async function fetchRecruiteeJobs(
     } else if (responseData.data?.jobs) {
       jobs = responseData.data.jobs;
     }
-    
-    // Log voor debugging
-    console.log('Recruitee API response structure:', {
-      responseType: Array.isArray(responseData) ? 'array' : typeof responseData,
-      hasOffers: !!responseData.offers,
-      hasJobs: !!responseData.jobs,
-      totalJobs: jobs.length,
-      firstJob: jobs[0] ? {
-        id: jobs[0].id,
-        title: jobs[0].title,
-        company_id: jobs[0].company_id,
-        hasCompany: !!jobs[0].company,
-        company: jobs[0].company,
-        allKeys: Object.keys(jobs[0])
-      } : null
-    });
     
     // Recruitee "offers" hebben mogelijk geen direct company_id veld
     // We moeten company data uit andere bronnen halen of een fallback gebruiken
@@ -262,11 +240,6 @@ export async function fetchRecruiteeCandidates(options: {
       url += `&offer_id=${offerId}`;
     }
 
-    console.log('Recruitee API Request (Candidates):', {
-      url: url.replace(RECRUITEE_API_KEY!, '***'),
-      stage,
-      offerId,
-    });
 
     const response = await fetch(url, {
       headers: {
@@ -304,27 +277,58 @@ export async function fetchRecruiteeCandidates(options: {
       candidates = (responseData as any).data.candidates;
     }
 
-    console.log('Recruitee API response (Candidates):', {
-      totalCandidates: candidates.length,
-      firstCandidate: candidates[0] ? {
-        id: candidates[0].id,
-        name: candidates[0].name,
-        hired_at: candidates[0].hired_at,
-        stage: candidates[0].stage,
-        allKeys: Object.keys(candidates[0]),
-        hasOfferId: !!(candidates[0] as any).offer_id,
-        hasOffer: !!(candidates[0] as any).offer,
-        hasOffers: !!(candidates[0] as any).offers,
-        offerId: (candidates[0] as any).offer_id,
-        offer: (candidates[0] as any).offer,
-        offers: (candidates[0] as any).offers,
-      } : null
-    });
 
     return candidates;
   } catch (error) {
     console.error('Error fetching Recruitee candidates:', error);
     throw error;
+  }
+}
+
+/**
+ * Haalt placements op voor een specifieke offer (vacature)
+ * Placements bevatten stage informatie per candidate
+ */
+export async function fetchPlacementsForOffer(offerId: number): Promise<any[]> {
+  if (!RECRUITEE_API_KEY || !RECRUITEE_COMPANY_ID) {
+    throw new Error('Recruitee API credentials not configured');
+  }
+
+  try {
+    // Probeer placements endpoint
+    const url = `${RECRUITEE_API_BASE_URL}/c/${RECRUITEE_COMPANY_ID}/offers/${offerId}/placements`;
+    
+    const response = await fetch(url, {
+      headers: {
+        'Authorization': `Bearer ${RECRUITEE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      if (response.status === 404) {
+        return [];
+      }
+      console.warn(`[OFFER ${offerId}] Placements endpoint error: ${response.status}`);
+      return [];
+    }
+
+    const responseData = await response.json();
+    let placements: any[] = [];
+    
+    if (Array.isArray(responseData)) {
+      placements = responseData;
+    } else if (responseData.placements) {
+      placements = responseData.placements;
+    } else if ((responseData as any).data?.placements) {
+      placements = (responseData as any).data.placements;
+    }
+
+
+    return placements;
+  } catch (error) {
+    console.warn(`[OFFER ${offerId}] Error fetching placements:`, error);
+    return [];
   }
 }
 
@@ -355,27 +359,202 @@ export async function fetchCandidatesForOffer(offerId: number): Promise<Recruite
     }
 
     const responseData = await response.json();
+    
+    // Log API response structuur
+    console.log(`[OFFER ${offerId}] API Response type:`, Array.isArray(responseData) ? 'array' : typeof responseData);
+    console.log(`[OFFER ${offerId}] Response keys:`, Object.keys(responseData).slice(0, 10));
+    
+    // Recruitee API kan verschillende formats hebben:
+    // 1. Direct array van candidates
+    // 2. { candidate: {...}, references: [...] } - zoals in de network tab (individuele candidate)
+    // 3. { candidates: [...] }
+    // 4. { data: { candidates: [...] } }
+    
     let candidates: RecruiteeCandidate[] = [];
+    let references: any[] = [];
     
     if (Array.isArray(responseData)) {
       candidates = responseData;
+      console.log(`[OFFER ${offerId}] Got ${candidates.length} candidates (array format)`);
+    } else if (responseData.candidate) {
+      // Enkele candidate met references (zoals in network tab)
+      candidates = [responseData.candidate];
+      references = responseData.references || [];
+      console.log(`[OFFER ${offerId}] Got 1 candidate with ${references.length} references`);
     } else if (responseData.candidates) {
       candidates = responseData.candidates;
+      references = responseData.references || [];
+      console.log(`[OFFER ${offerId}] Got ${candidates.length} candidates with ${references.length} references`);
     } else if ((responseData as any).data?.candidates) {
       candidates = (responseData as any).data.candidates;
+      references = (responseData as any).data.references || (responseData as any).references || [];
+      console.log(`[OFFER ${offerId}] Got ${candidates.length} candidates from data.candidates`);
+    } else if ((responseData as any).data?.candidate) {
+      candidates = [(responseData as any).data.candidate];
+      references = (responseData as any).data.references || (responseData as any).references || [];
+      console.log(`[OFFER ${offerId}] Got 1 candidate from data.candidate`);
     }
-
-    // Log voor debugging
+    
+    // ALTIJD per candidate de volledige data ophalen (met placements en references)
+    // Het /offers/{offerId}/candidates endpoint geeft alleen basisdata zonder placements/references
     if (candidates.length > 0) {
-      console.log(`Fetched ${candidates.length} candidates for offer ${offerId}`, {
-        firstCandidateKeys: Object.keys(candidates[0]),
-        hasOfferId: !!(candidates[0] as any).offer_id,
-        hasOffer: !!(candidates[0] as any).offer,
-        hasOffers: !!(candidates[0] as any).offers,
+      // Als we al references hebben, gebruik die
+      if (references.length === 0) {
+        console.log(`[OFFER ${offerId}] ⚠️ No references in response! Fetching full data for ${candidates.length} candidates...`);
+      } else {
+        console.log(`[OFFER ${offerId}] References found, but fetching full data anyway to ensure placements are included...`);
+      }
+      
+      // Batch processing om niet te veel requests tegelijk te doen
+      const BATCH_SIZE = 5;
+      const allEnrichedCandidates: Array<{candidate: any, references: any[]}> = [];
+      
+      for (let i = 0; i < candidates.length; i += BATCH_SIZE) {
+        const batch = candidates.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i/BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(candidates.length/BATCH_SIZE);
+        console.log(`[OFFER ${offerId}] Processing batch ${batchNum}/${totalBatches} (${batch.length} candidates)...`);
+        
+        const batchResults = await Promise.all(
+          batch.map(async (candidate: any, batchIdx: number) => {
+            const globalIdx = i + batchIdx;
+            if (globalIdx < 3) {
+              console.log(`[OFFER ${offerId}] Fetching candidate ${globalIdx + 1}/${candidates.length}: ${candidate.name} (ID: ${candidate.id})`);
+            }
+            try {
+              // Haal individuele candidate op met volledige data (zoals in network tab)
+              const candidateUrl = `${RECRUITEE_API_BASE_URL}/c/${RECRUITEE_COMPANY_ID}/candidates/${candidate.id}`;
+              const candidateResponse = await fetch(candidateUrl, {
+                headers: {
+                  'Authorization': `Bearer ${RECRUITEE_API_KEY}`,
+                  'Content-Type': 'application/json',
+                },
+              });
+              
+              if (candidateResponse.ok) {
+                const candidateData = await candidateResponse.json();
+                if (candidateData.candidate) {
+                  const c = candidateData.candidate;
+                  if (globalIdx < 3) {
+                    console.log(`[OFFER ${offerId}] ✓ Got full data for ${c.name}:`, {
+                      is_hired: c.is_hired,
+                      hired_at: c.hired_at,
+                      placement_hired_at: c.placements?.[0]?.hired_at,
+                      placement_stage_id: c.placements?.[0]?.stage_id,
+                      placement_hired_in_this_placement: c.placements?.[0]?.hired_in_this_placement,
+                      references_count: candidateData.references?.length || 0,
+                    });
+                  }
+                  return {
+                    candidate: candidateData.candidate,
+                    references: candidateData.references || [],
+                  };
+                }
+              } else {
+                console.warn(`[OFFER ${offerId}] Failed to fetch candidate ${candidate.id}: ${candidateResponse.status}`);
+              }
+            } catch (error) {
+              console.warn(`[OFFER ${offerId}] Error fetching full data for candidate ${candidate.id}:`, error);
+            }
+            return { candidate, references: [] };
+          })
+        );
+        
+        allEnrichedCandidates.push(...batchResults);
+      }
+      
+      // Combineer alle references
+      const allReferences: any[] = [];
+      allEnrichedCandidates.forEach(({ references: refs }) => {
+        if (refs && Array.isArray(refs)) {
+          refs.forEach((ref: any) => {
+            if (!allReferences.find(r => r.id === ref.id && r.type === ref.type)) {
+              allReferences.push(ref);
+            }
+          });
+        }
       });
+      
+      references = allReferences;
+      candidates = allEnrichedCandidates.map(({ candidate }) => candidate);
+      
+      console.log(`[OFFER ${offerId}] ✓ Combined ${references.length} unique references from ${allEnrichedCandidates.length} candidates`);
     }
-
-    return candidates;
+    
+    // Maak een map van stage ID -> stage details uit references
+    const stageMap = new Map<number, any>();
+    if (references && Array.isArray(references)) {
+      references.forEach((ref: any) => {
+        if (ref.type === 'Stage' && ref.id) {
+          stageMap.set(ref.id, {
+            id: ref.id,
+            name: ref.name,
+            category: ref.category,
+            group: ref.group,
+          });
+        }
+      });
+      console.log(`[OFFER ${offerId}] Created stage map with ${stageMap.size} stages`);
+    }
+    
+    // Enrich candidates met stage informatie uit placements en references
+    return candidates.map(candidate => {
+      const candidateAny = candidate as any;
+      const placements = candidateAny.placements || [];
+      
+      // Log sample candidate data - ALTIJD voor eerste 3
+      const candidateIndex = candidates.indexOf(candidate);
+      if (candidateIndex < 3) {
+        console.log(`[OFFER ${offerId}] Sample candidate ${candidateIndex + 1}: ${candidate.name} (ID: ${candidate.id}):`, {
+          is_hired: candidateAny.is_hired,
+          hired_at: candidate.hired_at,
+          placements_count: placements.length,
+          placement_stage_id: placements[0]?.stage_id,
+          placement_hired_at: placements[0]?.hired_at,
+          placement_hired_in_this_placement: placements[0]?.hired_in_this_placement,
+          has_references: !!candidateAny._references,
+          references_count: candidateAny._references?.length || 0,
+        });
+      }
+      
+      // Zoek de stage ID uit placements - API gebruikt snake_case!
+      let stageId: number | null = null;
+      if (placements.length > 0) {
+        // Gebruik de eerste placement (of zoek de juiste voor deze offer)
+        stageId = placements[0].stage_id || placements[0].stageId || null;
+      }
+      
+      // Haal stage details op uit de stage map
+      let stageInfo = candidate.stage;
+      if (stageId && stageMap.has(stageId)) {
+        const stageDetails = stageMap.get(stageId);
+        stageInfo = {
+          id: stageDetails.id,
+          name: stageDetails.name,
+          category: stageDetails.category,
+        };
+      }
+      
+      // Zoek de placement die bij deze offer hoort
+      let placementForOffer = placements[0];
+      if (placements.length > 1) {
+        const matchingPlacement = placements.find((p: any) => p.offerId === offerId);
+        if (matchingPlacement) {
+          placementForOffer = matchingPlacement;
+        }
+      }
+      
+      return {
+        ...candidate,
+        offer_id: offerId,
+        stage: stageInfo,
+        // Behoud placements en references voor latere checks
+        placements: placements,
+        _references: references, // Tijdelijk voor debugging
+        // Voeg ook de placement voor deze offer toe voor snelle access
+        _placementForOffer: placementForOffer,
+      };
+    });
   } catch (error) {
     console.error(`Error fetching candidates for offer ${offerId}:`, error);
     return [];
@@ -389,6 +568,20 @@ export async function fetchCandidatesForOffer(offerId: number): Promise<Recruite
 export async function fetchAllCandidatesAndApplications(month?: number, year?: number): Promise<{
   applications: RecruiteeCandidate[];
   hires: RecruiteeCandidate[];
+  stats?: {
+    totalCandidates: number;
+    hiresFound: number;
+    notFound: number;
+    byHiredAt: number;
+    byStageId: number;
+    byPlacementStageId: number;
+    byCurrentPlacementStageId: number;
+    byStageCategory: number;
+    byPlacementCategory: number;
+    byStageName: number;
+    byPlacementStageName: number;
+    noMatchSample: Array<{id: number, name: string, reason: string, data: any}>;
+  };
 }> {
   if (!RECRUITEE_API_KEY || !RECRUITEE_COMPANY_ID) {
     throw new Error('Recruitee API credentials not configured');
@@ -414,21 +607,112 @@ export async function fetchAllCandidatesAndApplications(month?: number, year?: n
       batches.push(offers.slice(i, i + BATCH_SIZE));
     }
     
-    console.log(`Processing ${offers.length} offers in ${batches.length} batches of ${BATCH_SIZE}`);
     
     // Verwerk batches parallel
     for (const batch of batches) {
       const batchPromises = batch.map(async (offer: RecruiteeJob) => {
         try {
-          const candidates = await fetchCandidatesForOffer(offer.id);
+          // Haal zowel candidates als placements op
+          const [candidates, placements] = await Promise.all([
+            fetchCandidatesForOffer(offer.id),
+            fetchPlacementsForOffer(offer.id),
+          ]);
+          
+          // Maak een map van candidate_id -> placement voor snelle lookup
+          const placementMap = new Map<number, any>();
+          placements.forEach((placement: any) => {
+            const candidateId = placement.candidate_id || placement.candidate?.id;
+            if (candidateId) {
+              placementMap.set(candidateId, placement);
+            }
+          });
+          
           const companyName = offer.company?.name || 'Onbekend Bedrijf';
           
-          return candidates.map(candidate => ({
-            ...candidate,
-            offer_id: offer.id,
-            offer_title: offer.title || 'Vacature onbekend',
-            offer_company: companyName,
-          }));
+          return candidates.map(candidate => {
+            const candidateAny = candidate as any;
+            
+            // EERST: Check placements die we apart hebben opgehaald via placements endpoint
+            const placementFromMap = placementMap.get(candidate.id);
+            let stageInfo = candidate.stage;
+            
+            if (placementFromMap?.stage) {
+              stageInfo = {
+                id: placementFromMap.stage.id || 0,
+                name: placementFromMap.stage.name || '',
+                category: placementFromMap.stage.category,
+              };
+            }
+            // TWEEDE: Check placements array in candidate object zelf
+            else if (candidateAny.placements && Array.isArray(candidateAny.placements)) {
+              // Zoek placement die bij deze offer hoort
+              const placementForOffer = candidateAny.placements.find(
+                (p: any) => (p.offer_id === offer.id) || (p.offer?.id === offer.id)
+              );
+              
+              if (placementForOffer?.stage) {
+                stageInfo = {
+                  id: placementForOffer.stage.id || 0,
+                  name: placementForOffer.stage.name || '',
+                  category: placementForOffer.stage.category,
+                };
+              }
+              // Als er geen specifieke placement is, gebruik de eerste placement
+              else if (candidateAny.placements[0]?.stage) {
+                stageInfo = {
+                  id: candidateAny.placements[0].stage.id || 0,
+                  name: candidateAny.placements[0].stage.name || '',
+                  category: candidateAny.placements[0].stage.category,
+                };
+              }
+            }
+            
+            // Fallback: check current_placement
+            if (!stageInfo && candidateAny.current_placement?.stage) {
+              stageInfo = {
+                id: candidateAny.current_placement.stage.id || 0,
+                name: candidateAny.current_placement.stage.name || '',
+                category: candidateAny.current_placement.stage.category,
+              };
+            }
+            
+            // Fallback: check current_stage
+            if (!stageInfo && candidateAny.current_stage) {
+              stageInfo = {
+                id: candidateAny.current_stage.id || 0,
+                name: candidateAny.current_stage.name || '',
+                category: candidateAny.current_stage.category,
+              };
+            }
+            
+            // Fallback: check stage_name en stage_id
+            if (!stageInfo && (candidateAny.stage_name || candidateAny.stage_id)) {
+              stageInfo = {
+                id: candidateAny.stage_id || 0,
+                name: candidateAny.stage_name || '',
+                category: candidateAny.stage_category,
+              };
+            }
+            
+            // Voeg placement uit map toe aan candidate object voor latere checks
+            const allPlacements = candidateAny.placements || [];
+            if (placementFromMap && !allPlacements.find((p: any) => p.id === placementFromMap.id)) {
+              allPlacements.push(placementFromMap);
+            }
+            
+            const enrichedCandidate: RecruiteeCandidate = {
+              ...candidate,
+              offer_id: offer.id,
+              offer_title: offer.title || 'Vacature onbekend',
+              offer_company: companyName,
+              stage: stageInfo,
+              // Behoud alle placements voor latere checks
+              placements: allPlacements,
+              current_placement: candidateAny.current_placement || placementFromMap,
+            };
+            
+            return enrichedCandidate;
+          });
         } catch (error) {
           console.warn(`Could not fetch candidates for offer ${offer.id} (${offer.title}):`, error);
           return [];
@@ -441,13 +725,11 @@ export async function fetchAllCandidatesAndApplications(month?: number, year?: n
       });
     }
     
-    console.log(`Total candidates fetched: ${allCandidates.length}`);
 
     // Gebruik een alternatieve aanpak: haal candidates op per offer via offer_id parameter
     // Dit zorgt ervoor dat we altijd de juiste offer informatie hebben
     // Alleen gebruiken als we nog weinig candidates hebben
     if (allCandidates.length < 50) {
-      console.log(`Trying alternative approach: fetching candidates per offer using offer_id parameter`);
       
       // Batch processing voor betere performance
       const BATCH_SIZE = 10;
@@ -487,7 +769,6 @@ export async function fetchAllCandidatesAndApplications(month?: number, year?: n
         });
       }
       
-      console.log(`Total candidates after all methods: ${allCandidates.length}`);
     }
 
     // Filter op maand/jaar als opgegeven
@@ -532,42 +813,385 @@ export async function fetchAllCandidatesAndApplications(month?: number, year?: n
       return true;
     });
 
+
+    // Statistieken voor debugging
+    const hireStats = {
+      totalCandidates: allCandidates.length,
+      byHiredAt: 0,
+      byStageId: 0,
+      byPlacementStageId: 0,
+      byCurrentPlacementStageId: 0,
+      byStageCategory: 0,
+      byPlacementCategory: 0,
+      byStageName: 0,
+      byPlacementStageName: 0,
+      noMatch: [] as Array<{id: number, name: string, reason: string, data: any}>,
+    };
+
+    console.log(`\n=== HIRE DETECTION START ===`);
+    console.log(`Total candidates to check: ${allCandidates.length}`);
+    
+    // Log sample van eerste paar candidates
+    if (allCandidates.length > 0) {
+      console.log(`\nSample candidates (first 3):`);
+      allCandidates.slice(0, 3).forEach((c, idx) => {
+        const cAny = c as any;
+        console.log(`  ${idx + 1}. ${c.name} (ID: ${c.id}):`, {
+          is_hired: cAny.is_hired,
+          hired_at: c.hired_at,
+          placement_hired_at: cAny.placements?.[0]?.hired_at,
+          placement_stage_id: cAny.placements?.[0]?.stage_id,
+          placement_hired_in_this_placement: cAny.placements?.[0]?.hired_in_this_placement,
+          has_references: !!cAny._references,
+          references_count: cAny._references?.length || 0,
+        });
+      });
+    }
+    
     const hires = allCandidates.filter(candidate => {
-      const isHire = candidate.hired_at || 
-                     candidate.stage?.category === 'hire' ||
-                     candidate.stage?.name?.toLowerCase().includes('hire') ||
-                     candidate.stage?.name?.toLowerCase().includes('aangenomen');
+      const candidateAny = candidate as any;
       
-      if (!isHire) return false;
+      // Check stage informatie uit verschillende bronnen
+      const stageName = candidate.stage?.name?.toLowerCase() || '';
+      const stageCategory = candidate.stage?.category?.toLowerCase() || '';
       
-      // Filter altijd op jaar als opgegeven
-      if (year !== undefined) {
-        // Voor hires, gebruik hired_at eerst, anders updated_at
-        const hireDateStr = candidate.hired_at || candidate.updated_at;
-        if (!hireDateStr) return false;
-        const hireDate = new Date(hireDateStr);
+      // Check placements array - Recruitee gebruikt placements[].stageId
+      const placements = candidate.placements || candidateAny.placements;
+      let placementStageId: number | undefined;
+      let placementStageName = '';
+      let placementCategory = '';
+      
+      if (placements && Array.isArray(placements) && placements.length > 0) {
+        // Gebruik de eerste placement (of zoek de juiste voor deze offer)
+        const placement = placements[0];
         
-        const yearMatches = hireDate.getFullYear() === year;
+        // Recruitee gebruikt stage_id (snake_case) direct in placement object
+        placementStageId = placement.stage_id || placement.stageId || placement.stage?.id;
         
-        if (month !== undefined) {
-          return yearMatches && hireDate.getMonth() === month;
+        // Als we stage details hebben uit references, gebruik die
+        if (placementStageId && candidateAny._references) {
+          const stageRef = candidateAny._references.find((ref: any) => 
+            ref.type === 'Stage' && ref.id === placementStageId
+          );
+          if (stageRef) {
+            placementStageName = stageRef.name?.toLowerCase() || '';
+            placementCategory = stageRef.category?.toLowerCase() || '';
+          }
         }
         
+        // Fallback: gebruik stage object uit placement als die er is
+        if (!placementCategory && placement.stage) {
+          placementStageName = placement.stage.name?.toLowerCase() || '';
+          placementCategory = placement.stage.category?.toLowerCase() || '';
+        }
+      }
+      
+      // Check current_placement
+      const currentPlacement = candidate.current_placement || candidateAny.current_placement;
+      const currentPlacementStage = currentPlacement?.stage?.name?.toLowerCase() || '';
+      const currentPlacementCategory = currentPlacement?.stage?.category?.toLowerCase() || '';
+      const currentPlacementStageId = currentPlacement?.stage?.id;
+      
+      // Check andere mogelijke velden
+      const currentStage = candidateAny.current_stage?.name?.toLowerCase() || '';
+      const stageNameField = candidateAny.stage_name?.toLowerCase() || '';
+      const status = candidateAny.status?.toLowerCase() || '';
+      const state = candidateAny.state?.toLowerCase() || '';
+      
+      // Haal stage ID op uit verschillende bronnen
+      const stageId = candidate.stage?.id || candidateAny.stage_id || candidateAny.current_stage_id;
+      
+      // Check alle mogelijke manieren om een hire te detecteren
+      let isHire = false;
+      let reason = '';
+      
+      // Check op hire - gebruik ALLE beschikbare indicatoren
+      // 1. Check candidate.is_hired (directe indicator) - API gebruikt snake_case!
+      if (candidateAny.is_hired === true) {
+        isHire = true;
+        reason = 'candidate.is_hired === true';
+        hireStats.byHiredAt++;
+      }
+      // 2. Check placement.hired_at (in placement object) - API gebruikt snake_case!
+      else if (placements && placements.length > 0 && placements[0].hired_at) {
+        isHire = true;
+        reason = `placement.hired_at: ${placements[0].hired_at}`;
+        hireStats.byHiredAt++;
+      }
+      // 3. Check placement.hired_in_this_placement - API gebruikt snake_case!
+      else if (placements && placements.length > 0 && placements[0].hired_in_this_placement === true) {
+        isHire = true;
+        reason = 'placement.hired_in_this_placement === true';
+        hireStats.byHiredAt++;
+      }
+      // 4. Check candidate.hired_at (oude veld)
+      else if (candidate.hired_at) {
+        isHire = true;
+        reason = 'candidate.hired_at datum';
+        hireStats.byHiredAt++;
+      }
+      // 5. Check placement category uit references
+      else if (placementCategory === 'hire') {
+        // BELANGRIJK: Check placement category uit references
+        isHire = true;
+        reason = `placement category "hire" (stageId: ${placementStageId})`;
+        hireStats.byPlacementCategory++;
+      } else if (stageCategory === 'hire') {
+        isHire = true;
+        reason = 'stage category "hire"';
+        hireStats.byStageCategory++;
+      } else if (currentPlacementCategory === 'hire') {
+        isHire = true;
+        reason = 'current_placement category "hire"';
+        hireStats.byCurrentPlacementStageId++;
+      } else if (placementStageName === 'aangenomen' || placementStageName.includes('aangenomen') || placementStageName.includes('hire')) {
+        isHire = true;
+        reason = `placement stage name "${placementStageName}"`;
+        hireStats.byPlacementStageName++;
+      } else if (stageName === 'aangenomen' || stageName.includes('aangenomen') || stageName.includes('hire')) {
+        isHire = true;
+        reason = `stage name "${stageName}"`;
+        hireStats.byStageName++;
+      }
+      
+      // Als geen match, log waarom niet - gebruik ALLE beschikbare stage informatie
+      if (!isHire) {
+        // Haal de daadwerkelijke stage naam op (niet lowercase voor display)
+        const actualStageName = candidate.stage?.name || 
+                                (placements && placements.length > 0 ? placements[0]?.stage?.name : null) ||
+                                currentPlacement?.stage?.name ||
+                                candidateAny.stage_name ||
+                                candidateAny.current_stage?.name ||
+                                '';
+        
+        // Haal de daadwerkelijke stage ID op
+        const actualStageId = candidate.stage?.id ||
+                             stageId ||
+                             (placements && placements.length > 0 ? placements[0]?.stage?.id : null) ||
+                             currentPlacement?.stage?.id ||
+                             candidateAny.stage_id ||
+                             candidateAny.current_stage_id ||
+                             null;
+        
+        // Haal de daadwerkelijke stage category op
+        const actualStageCategory = candidate.stage?.category ||
+                                   stageCategory ||
+                                   (placements && placements.length > 0 ? placements[0]?.stage?.category : null) ||
+                                   currentPlacement?.stage?.category ||
+                                   '';
+        
+        hireStats.noMatch.push({
+          id: candidate.id,
+          name: candidate.name,
+          reason: actualStageName ? `Stage: "${actualStageName}" (geen hire)` : 'Geen stage informatie gevonden',
+          data: {
+            // Direct stage object (gebruik de daadwerkelijke waarden)
+            stage: candidate.stage ? {
+              id: candidate.stage.id,
+              name: candidate.stage.name,
+              category: candidate.stage.category,
+            } : null,
+            // Daadwerkelijke stage informatie (voor display)
+            actual_stage_id: actualStageId,
+            actual_stage_name: actualStageName,
+            actual_stage_category: actualStageCategory,
+            // Oude velden (voor backwards compatibility)
+            stage_id: stageId,
+            stage_name: candidate.stage?.name || stageName || candidateAny.stage_name || '',
+            stage_category: candidate.stage?.category || stageCategory || '',
+            // Placements informatie
+            placements_count: placements?.length || 0,
+            placements: placements?.map((p: any) => ({
+              id: p.id,
+              stage_id: p.stage?.id,
+              stage_name: p.stage?.name,
+              stage_category: p.stage?.category,
+              offer_id: p.offer_id || p.offer?.id,
+            })) || [],
+            placement_stage_id: placementStageId,
+            placement_stage_name: placementStageName ? (placements?.find((p: any) => p.stage_id === placementStageId || p.stageId === placementStageId || p.stage?.id === placementStageId)?.stage?.name || placementStageName) : null,
+            placement_category: placementCategory,
+            // Current placement
+            current_placement: currentPlacement ? {
+              id: currentPlacement.id,
+              stage_id: currentPlacement.stage?.id,
+              stage_name: currentPlacement.stage?.name,
+              stage_category: currentPlacement.stage?.category,
+            } : null,
+            // Andere velden
+            current_stage: candidateAny.current_stage,
+            current_stage_id: candidateAny.current_stage_id,
+            stage_name_field: candidateAny.stage_name,
+            status: candidateAny.status,
+            state: candidateAny.state,
+            hired_at: candidate.hired_at,
+            is_hired: candidateAny.is_hired,
+            placement_hired_at: placements && placements.length > 0 ? placements[0].hired_at : null,
+            placement_hired_in_this_placement: placements && placements.length > 0 ? placements[0].hired_in_this_placement : null,
+            offer_id: candidate.offer_id,
+            offer_title: candidate.offer_title,
+            offer_company: candidate.offer_company,
+            // Alle beschikbare keys voor debugging
+            allKeys: Object.keys(candidate),
+          }
+        });
+      }
+      
+      // Return true als het een hire is (zonder filtering op maand/jaar hier!)
+      return isHire;
+    });
+    
+    // Filter hires op maand/jaar NA de hire detection - gebruik placement.hired_at eerst!
+    const filteredHires = hires.filter(hire => {
+      // Als er geen filter is, toon alles
+      if (year === undefined && month === undefined) {
+        return true;
+      }
+      
+      const hireAny = hire as any;
+      const placements = hireAny.placements || [];
+      
+      // Voor hires, gebruik placement.hired_at eerst, dan candidate.hired_at, dan updated_at
+      const hireDateStr = (placements.length > 0 && placements[0].hired_at) 
+                        || hire.hired_at 
+                        || hire.updated_at;
+      
+      if (!hireDateStr) {
+        // Geen datum beschikbaar, skip deze hire als we filteren
+        console.log(`[FILTER] Skipping hire ${hire.name} (${hire.id}): no date available`);
+        return false;
+      }
+      
+      const hireDate = new Date(hireDateStr);
+      const hireYear = hireDate.getFullYear();
+      const hireMonth = hireDate.getMonth();
+      
+      // Filter op jaar als opgegeven
+      if (year !== undefined) {
+        const yearMatches = hireYear === year;
+        
+        // Als ook maand is opgegeven, filter ook op maand
+        if (month !== undefined) {
+          const monthMatches = hireMonth === month;
+          const result = yearMatches && monthMatches;
+          if (!result) {
+            console.log(`[FILTER] Skipping hire ${hire.name}: year=${hireYear} (expected ${year}), month=${hireMonth} (expected ${month})`);
+          }
+          return result;
+        }
+        
+        // Alleen jaar filter
         return yearMatches;
       }
       
-      // Als alleen maand is opgegeven, filter op maand
+      // Als alleen maand is opgegeven, filter op maand van huidige jaar
       if (month !== undefined) {
-        const hireDateStr = candidate.hired_at || candidate.updated_at;
-        if (!hireDateStr) return false;
-        const hireDate = new Date(hireDateStr);
-        return hireDate.getMonth() === month;
+        // Check ook het jaar - gebruik huidige jaar als default
+        const currentYear = new Date().getFullYear();
+        const result = hireYear === currentYear && hireMonth === month;
+        if (!result) {
+          console.log(`[FILTER] Skipping hire ${hire.name}: year=${hireYear} (expected ${currentYear}), month=${hireMonth} (expected ${month})`);
+        }
+        return result;
       }
       
       return true;
     });
-
-    return { applications, hires };
+    
+    const monthNames = ['Januari', 'Februari', 'Maart', 'April', 'Mei', 'Juni', 'Juli', 'Augustus', 'September', 'Oktober', 'November', 'December'];
+    
+    console.log(`\n=== FINAL RESULTS ===`);
+    console.log(`Total applications: ${applications.length}`);
+    console.log(`Total hires (before date filter): ${hires.length}`);
+    console.log(`Total hires (after date filter): ${filteredHires.length}`);
+    console.log(`Filter: month=${month} (${month !== undefined ? monthNames[month] : 'none'}), year=${year}`);
+    
+    // Debug: toon ALLE hires met hun datums voor februari
+    if (hires.length > 0 && month === 1) {
+      console.log(`\n=== DEBUG: ALL hires with dates (looking for month 1 = Februari, year ${year}) ===`);
+      const februaryHires: any[] = [];
+      const nonFebruaryHires: any[] = [];
+      
+      hires.forEach((hire, idx) => {
+        const hireAny = hire as any;
+        const placements = hireAny.placements || [];
+        const hireDateStr = (placements.length > 0 && placements[0].hired_at) || hire.hired_at || hire.updated_at;
+        if (hireDateStr) {
+          const hireDate = new Date(hireDateStr);
+          const matches = hireDate.getMonth() === 1 && hireDate.getFullYear() === year;
+          if (matches) {
+            februaryHires.push({ hire, dateStr: hireDateStr, date: hireDate });
+          } else {
+            nonFebruaryHires.push({ hire, dateStr: hireDateStr, date: hireDate, month: hireDate.getMonth(), year: hireDate.getFullYear() });
+          }
+        } else {
+          nonFebruaryHires.push({ hire, dateStr: null, date: null });
+        }
+      });
+      
+      console.log(`\n✓ February hires found: ${februaryHires.length}`);
+      februaryHires.slice(0, 10).forEach((item, idx) => {
+        console.log(`  ${idx + 1}. ${item.hire.name}: ${item.dateStr} -> ${item.date.getFullYear()}-${item.date.getMonth() + 1}`);
+      });
+      
+      console.log(`\n✗ Non-February hires: ${nonFebruaryHires.length}`);
+      // Groepeer per maand
+      const byMonth = new Map<number, any[]>();
+      nonFebruaryHires.forEach(item => {
+        if (item.date) {
+          const m = item.date.getMonth();
+          if (!byMonth.has(m)) {
+            byMonth.set(m, []);
+          }
+          byMonth.get(m)!.push(item);
+        }
+      });
+      byMonth.forEach((items, m) => {
+        console.log(`  ${monthNames[m]}: ${items.length} hires`);
+      });
+    }
+    console.log(`Hires found by method:`);
+    console.log(`  - byHiredAt: ${hireStats.byHiredAt}`);
+    console.log(`  - byPlacementCategory: ${hireStats.byPlacementCategory}`);
+    console.log(`  - byStageCategory: ${hireStats.byStageCategory}`);
+    console.log(`  - byPlacementStageName: ${hireStats.byPlacementStageName}`);
+    console.log(`  - byStageName: ${hireStats.byStageName}`);
+    
+    if (filteredHires.length > 0) {
+      console.log(`\nFirst 5 filtered hires:`);
+      filteredHires.slice(0, 5).forEach((hire, idx) => {
+        const hAny = hire as any;
+        const placements = hAny.placements || [];
+        const hireDateStr = (placements.length > 0 && placements[0].hired_at) || hire.hired_at || hire.updated_at;
+        const hireDate = hireDateStr ? new Date(hireDateStr) : null;
+        console.log(`  ${idx + 1}. ${hire.name} (ID: ${hire.id})`);
+        console.log(`     - is_hired: ${hAny.is_hired}`);
+        console.log(`     - hired_at: ${hire.hired_at}`);
+        console.log(`     - placement.hired_at: ${placements[0]?.hired_at || 'GEEN'}`);
+        console.log(`     - date used: ${hireDateStr} (${hireDate ? `${hireDate.getFullYear()}-${hireDate.getMonth()}` : 'N/A'})`);
+        console.log(`     - placement.stage_id: ${placements[0]?.stage_id || 'GEEN'}`);
+        console.log(`     - stage.category: ${hire.stage?.category || 'GEEN'}`);
+      });
+    }
+    
+    return { 
+      applications, 
+      hires: filteredHires,
+      stats: {
+        totalCandidates: hireStats.totalCandidates,
+        hiresFound: filteredHires.length,
+        notFound: hireStats.noMatch.length,
+        byHiredAt: hireStats.byHiredAt,
+        byStageId: hireStats.byStageId,
+        byPlacementStageId: hireStats.byPlacementStageId,
+        byCurrentPlacementStageId: hireStats.byCurrentPlacementStageId,
+        byStageCategory: hireStats.byStageCategory,
+        byPlacementCategory: hireStats.byPlacementCategory,
+        byStageName: hireStats.byStageName,
+        byPlacementStageName: hireStats.byPlacementStageName,
+        noMatchSample: hireStats.noMatch.slice(0, 5), // Eerste 5 voor UI
+      }
+    };
   } catch (error) {
     console.error('Error fetching candidates and applications:', error);
     throw error;

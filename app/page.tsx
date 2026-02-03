@@ -3,6 +3,8 @@ import { createClient } from '@/lib/supabase/server';
 import Dashboard from '@/components/dashboard';
 import { LogoutButton } from '@/components/logout-button';
 import { AssignRoleButton } from '@/components/assign-role-button';
+import { PreloadTrigger } from '@/components/preload-trigger';
+import { BackgroundSync } from '@/components/background-sync';
 
 export default async function HomePage() {
   const supabase = createClient();
@@ -22,6 +24,7 @@ export default async function HomePage() {
       console.error('Session:', session);
       redirect('/login');
     }
+
 
   // Check if user has a role (optional - users without role can still view)
   let roleData = null;
@@ -82,6 +85,8 @@ export default async function HomePage() {
 
   return (
     <>
+      <PreloadTrigger />
+      <BackgroundSync />
       {!roleData && user.email && (
         <div className="fixed top-16 left-0 right-0 z-50 bg-yellow-50 border-b border-yellow-200 shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">

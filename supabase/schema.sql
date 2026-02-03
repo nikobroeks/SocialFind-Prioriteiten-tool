@@ -162,6 +162,47 @@ CREATE POLICY "Admins can delete priorities"
   USING (public.is_admin(auth.uid()));
 
 -- ============================================
+-- Recruitee Cache Table
+-- ============================================
+-- Deze tabel slaat gecachte Recruitee data op voor snellere laadtijden
+CREATE TABLE public.recruitee_cache (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  jobs JSONB NOT NULL DEFAULT '[]'::jsonb,
+  hires JSONB NOT NULL DEFAULT '[]'::jsonb,
+  applications JSONB NOT NULL DEFAULT '[]'::jsonb,
+  stats JSONB,
+  cached_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Index voor snelle lookups
+CREATE INDEX idx_recruitee_cache_user_id ON public.recruitee_cache(user_id);
+CREATE INDEX idx_recruitee_cache_cached_at ON public.recruitee_cache(cached_at);
+
+-- RLS Policies voor cache
+ALTER TABLE public.recruitee_cache ENABLE ROW LEVEL SECURITY;
+
+-- Users kunnen alleen hun eigen cache lezen
+CREATE POLICY "Users can view their own cache"
+  ON public.recruitee_cache
+  FOR SELECT
+  USING (auth.uid() = user_id);
+
+-- Users kunnen alleen hun eigen cache updaten
+CREATE POLICY "Users can update their own cache"
+  ON public.recruitee_cache
+  FOR ALL
+  USING (auth.uid() = user_id)
+  WITH CHECK (auth.uid() = user_id);
+
+-- Trigger voor updated_at
+CREATE TRIGGER update_recruitee_cache_updated_at
+  BEFORE UPDATE ON public.recruitee_cache
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================
 -- Initial Admin Users Setup
 -- ============================================
 -- Let op: Deze moeten handmatig worden ingevuld na het aanmaken van de users in Supabase Auth
