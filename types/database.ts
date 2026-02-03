@@ -27,7 +27,7 @@ export interface UserRole {
   id: string;
   user_id: string;
   email: string;
-  role: 'admin' | 'viewer';
+  role: UserRoleType;
   created_at: string;
   updated_at: string;
 }

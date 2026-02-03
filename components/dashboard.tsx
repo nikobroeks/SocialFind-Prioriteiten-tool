@@ -17,6 +17,7 @@ import { getUserRole } from '@/lib/supabase/queries';
 import { Building2, TrendingUp, AlertCircle, Users, Settings } from 'lucide-react';
 import { CompanyJobsModal } from './company-jobs-modal';
 import { getAllJobVisibility } from '@/lib/supabase/job-visibility';
+import { RecruiteeJob } from '@/types/recruitee';
 
 export default function Dashboard() {
   const [userRole, setUserRole] = useState<'admin' | 'viewer' | null>(null);
