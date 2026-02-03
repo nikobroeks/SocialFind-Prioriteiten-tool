@@ -36,8 +36,9 @@ export async function GET(request: Request) {
       }
     }
 
-    // Try to get from cache first if no date filters and cache is enabled
-    if (useCache && month === undefined && year === undefined && user) {
+    // ALTIJD eerst proberen cache te gebruiken als beschikbaar (ongeacht filters)
+    // Filters worden client-side toegepast op de gecachte data
+    if (useCache && user) {
       const { data: cache } = await supabase
         .from('recruitee_cache')
         .select('*')
@@ -49,12 +50,14 @@ export async function GET(request: Request) {
         const now = new Date();
         const age = now.getTime() - cachedAt.getTime();
 
-        if (age < CACHE_DURATION_MS) {
-          console.log('[CACHE HIT] Using cached data for hires/applications');
+        // Cache is geldig als deze minder dan 5 minuten oud is (of altijd als er data is)
+        if (age < CACHE_DURATION_MS || (cache as any).hires || (cache as any).applications) {
+          console.log('[CACHE HIT] Using cached data for hires/applications (age:', Math.round(age / 1000), 'seconds)');
           const cachedHires = JSON.parse((cache as any).hires || '[]');
           const cachedApplications = JSON.parse((cache as any).applications || '[]');
           const cachedStats = (cache as any).stats ? JSON.parse((cache as any).stats) : null;
 
+          // Return ALL cached data - filtering happens client-side
           if (includeApplications) {
             return NextResponse.json({
               applications: cachedApplications,

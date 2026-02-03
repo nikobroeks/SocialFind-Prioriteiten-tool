@@ -14,8 +14,32 @@ export async function GET(request: Request) {
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - days);
 
-    // Fetch all hires (no date filter, we'll filter client-side)
-    const { hires } = await fetchAllCandidatesAndApplications();
+    // Try to get from cache first
+    const { createClient } = await import('@/lib/supabase/server');
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+
+    let hires: any[] = [];
+
+    if (user) {
+      const { data: cache } = await supabase
+        .from('recruitee_cache')
+        .select('*')
+        .eq('user_id', user.id)
+        .single();
+
+      if (cache && (cache as any).hires) {
+        console.log('[COMPANY-HIRES] Using cached hires data');
+        hires = JSON.parse((cache as any).hires || '[]');
+      }
+    }
+
+    // If no cache, fetch from API
+    if (hires.length === 0) {
+      console.log('[COMPANY-HIRES] Cache miss, fetching from API');
+      const result = await fetchAllCandidatesAndApplications();
+      hires = result.hires;
+    }
 
     // Group by company and filter by date
     const companyHires: Record<string, number> = {};

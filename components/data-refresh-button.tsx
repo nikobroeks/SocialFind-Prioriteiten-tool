@@ -142,7 +142,15 @@ export function DataRefreshButton() {
       setCompleted(true);
       
       // Invalidate all React Query caches to force refetch
+      // This will trigger all queries to refetch and use the new cached data
       await queryClient.invalidateQueries();
+      
+      // Also explicitly refetch the main queries
+      await Promise.all([
+        queryClient.refetchQueries({ queryKey: ['hires-applications'] }),
+        queryClient.refetchQueries({ queryKey: ['company-hires-90d'] }),
+        queryClient.refetchQueries({ queryKey: ['recruitee-jobs'] }),
+      ]);
       
       // Show success message for 3 seconds, then hide progress
       setTimeout(() => {
