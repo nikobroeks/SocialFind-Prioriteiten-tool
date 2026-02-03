@@ -8,6 +8,7 @@ export interface RecruiteeJob {
   title: string;
   status: string;
   company_id: number;
+  company_string_id?: string; // Voor groepering op klantbedrijf naam
   company?: RecruiteeCompany;
   created_at: string;
   updated_at: string;

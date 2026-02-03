@@ -5,20 +5,31 @@ import { useRecruiteeJobs } from '@/hooks/use-recruitee-jobs';
 import { getAllPriorities } from '@/lib/supabase/queries';
 import { VacancyWithPriority, CompanyGroup } from '@/types/dashboard';
 import { getDisplayPriority } from '@/lib/utils';
+import { PriorityColor } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
 import { VacancyRow } from './vacancy-row';
-import { useState } from 'react';
+import { DashboardHeader } from './dashboard-header';
+import { ViewToggle, ViewMode } from './view-toggle';
+import { KanbanView } from './kanban-view';
+import { CompactView } from './compact-view';
+import { useState, useEffect } from 'react';
 import { getUserRole } from '@/lib/supabase/queries';
+import { Building2, TrendingUp, AlertCircle } from 'lucide-react';
 
 export default function Dashboard() {
   const [userRole, setUserRole] = useState<'admin' | 'viewer' | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
 
   // Fetch user role
-  useQuery({
+  const { data: roleData } = useQuery({
     queryKey: ['userRole'],
     queryFn: getUserRole,
-    onSuccess: setUserRole,
   });
+  
+  // Update userRole state when roleData changes
+  useEffect(() => {
+    if (roleData) setUserRole(roleData);
+  }, [roleData]);
 
   // Fetch Recruitee jobs
   const { data: jobs = [], isLoading: jobsLoading, error: jobsError } = useRecruiteeJobs({
@@ -75,26 +86,65 @@ export default function Dashboard() {
     };
   });
 
-  // Group by company
+  // Group by company (gebruik company_string_id als die bestaat, anders company.id)
   const companyGroups: CompanyGroup[] = Object.values(
     vacanciesWithPriority.reduce((acc, vacancy) => {
-      const companyId = vacancy.company.id;
-      if (!acc[companyId]) {
-        acc[companyId] = {
+      // Gebruik company_string_id voor groepering (op basis van naam uit titel)
+      const companyKey = (vacancy.job as any).company_string_id || 
+                        vacancy.company.id.toString();
+      
+      if (!acc[companyKey]) {
+        acc[companyKey] = {
           company: vacancy.company,
           vacancies: [],
         };
       }
-      acc[companyId].vacancies.push(vacancy);
+      acc[companyKey].vacancies.push(vacancy);
       return acc;
-    }, {} as Record<number, CompanyGroup>)
+    }, {} as Record<string, CompanyGroup>)
   );
 
-  // Sort companies by name
-  companyGroups.sort((a, b) => a.company.name.localeCompare(b.company.name));
+  // Bereken company priority: hoogste priority van alle vacatures binnen dat bedrijf
+  const companyGroupsWithPriority = companyGroups.map(group => {
+    const priorities = group.vacancies.map(v => {
+      const priorityValue = v.displayPriority === 'Red' ? 3 : 
+                           v.displayPriority === 'Orange' ? 2 : 1;
+      return priorityValue;
+    });
+    const maxPriority = Math.max(...priorities);
+    const companyPriority: PriorityColor = maxPriority === 3 ? 'Red' : 
+                                           maxPriority === 2 ? 'Orange' : 'Green';
+    
+    return {
+      ...group,
+      companyPriority,
+      // Sorteer vacatures binnen het bedrijf op priority (hoogste eerst)
+      vacancies: [...group.vacancies].sort((a, b) => {
+        const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
+        return priorityOrder[b.displayPriority] - priorityOrder[a.displayPriority];
+      }),
+    };
+  });
+
+  // Sorteer bedrijven op priority (Red > Orange > Green), dan op naam
+  companyGroupsWithPriority.sort((a, b) => {
+    const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
+    const priorityDiff = priorityOrder[b.companyPriority] - priorityOrder[a.companyPriority];
+    if (priorityDiff !== 0) return priorityDiff;
+    return a.company.name.localeCompare(b.company.name);
+  });
 
   if (jobsLoading || prioritiesLoading) {
-    return <div className="text-center py-8">Laden...</div>;
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <div className="flex items-center justify-center min-h-screen">
+          <div className="text-center">
+            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
+            <p className="text-gray-600">Laden...</p>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   if (jobsError) {
@@ -115,48 +165,166 @@ export default function Dashboard() {
   console.log('Dashboard data:', {
     jobsCount: jobs.length,
     prioritiesCount: priorities.length,
-    companyGroupsCount: companyGroups.length,
-    companyGroups: companyGroups.map(g => ({
+    companyGroupsCount: companyGroupsWithPriority.length,
+    companyGroups: companyGroupsWithPriority.map(g => ({
       id: g.company.id,
       name: g.company.name,
+      priority: g.companyPriority,
       vacanciesCount: g.vacancies.length
     }))
   });
 
+  // Calculate totals
+  const totalVacancies = jobs.length;
+  const totalCompanies = companyGroupsWithPriority.length;
+  const redCompanies = companyGroupsWithPriority.filter(g => g.companyPriority === 'Red').length;
+  const orangeCompanies = companyGroupsWithPriority.filter(g => g.companyPriority === 'Orange').length;
+
   return (
-    <div className="space-y-8">
-      {companyGroups.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          {jobs.length === 0 ? (
-            <div>
-              <p>Geen vacatures gevonden.</p>
-              <p className="text-sm mt-2">Check of de Recruitee API credentials correct zijn ingesteld.</p>
+    <div className="min-h-screen bg-gray-50">
+      <DashboardHeader totalCompanies={totalCompanies} totalVacancies={totalVacancies} />
+      
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Stats Overview */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Totaal Bedrijven</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{totalCompanies}</p>
+              </div>
+              <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <Building2 className="h-6 w-6 text-orange-600" />
+              </div>
             </div>
-          ) : (
-            <div>
-              <p>Geen bedrijven gevonden in de vacatures.</p>
-              <p className="text-sm mt-2">Aantal jobs: {jobs.length}</p>
+          </div>
+          
+          <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Totaal Vacatures</p>
+                <p className="text-3xl font-bold text-gray-900 mt-1">{totalVacancies}</p>
+              </div>
+              <div className="h-12 w-12 bg-blue-100 rounded-lg flex items-center justify-center">
+                <TrendingUp className="h-6 w-6 text-blue-600" />
+              </div>
             </div>
-          )}
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-red-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Hoog Prioriteit</p>
+                <p className="text-3xl font-bold text-red-600 mt-1">{redCompanies}</p>
+              </div>
+              <div className="h-12 w-12 bg-red-100 rounded-lg flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-red-600" />
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white rounded-xl shadow-sm border border-orange-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-600">Medium Prioriteit</p>
+                <p className="text-3xl font-bold text-orange-600 mt-1">{orangeCompanies}</p>
+              </div>
+              <div className="h-12 w-12 bg-orange-100 rounded-lg flex items-center justify-center">
+                <AlertCircle className="h-6 w-6 text-orange-600" />
+              </div>
+            </div>
+          </div>
         </div>
-      ) : (
-        companyGroups.map((group) => (
-          <div key={group.company.id} className="border rounded-lg p-6">
-            <h2 className="text-2xl font-semibold mb-4">{group.company.name}</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left p-2">Vacature</th>
-                    <th className="text-left p-2">Strategie</th>
-                    <th className="text-left p-2">Hiring</th>
-                    <th className="text-left p-2">Pijn</th>
-                    <th className="text-left p-2">Prioriteit</th>
-                    {userRole === 'admin' && (
-                      <th className="text-left p-2">Acties</th>
-                    )}
-                  </tr>
-                </thead>
+
+        {/* View Toggle - Always visible */}
+        <div className="flex items-center justify-between mb-6 bg-white rounded-lg shadow-sm border border-gray-200 px-6 py-4">
+          <h2 className="text-lg font-semibold text-gray-900">Vacatures Overzicht</h2>
+          <ViewToggle currentView={viewMode} onViewChange={setViewMode} />
+        </div>
+
+        {/* Company Groups */}
+        <div className="space-y-6">
+          {companyGroupsWithPriority.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-xl shadow-sm border border-gray-200">
+              {jobs.length === 0 ? (
+                <div>
+                  <p className="text-gray-600">Geen vacatures gevonden.</p>
+                  <p className="text-sm mt-2 text-gray-500">Check of de Recruitee API credentials correct zijn ingesteld.</p>
+                </div>
+              ) : (
+                <div>
+                  <p className="text-gray-600">Geen bedrijven gevonden in de vacatures.</p>
+                  <p className="text-sm mt-2 text-gray-500">Aantal jobs: {jobs.length}</p>
+                </div>
+              )}
+            </div>
+          ) : viewMode === 'kanban' ? (
+            // Kanban View - All vacancies grouped by priority
+            <KanbanView 
+              vacancies={vacanciesWithPriority} 
+              isAdmin={userRole === 'admin'} 
+            />
+          ) : viewMode === 'compact' ? (
+            // Compact View - Company groups in compact format
+            <CompactView 
+              companyGroups={companyGroupsWithPriority} 
+              isAdmin={userRole === 'admin'} 
+            />
+          ) : (
+            // Table View - Original table view per company
+            companyGroupsWithPriority.map((group) => {
+          const priorityBorderColor = {
+            Red: 'border-l-red-500',
+            Orange: 'border-l-orange-500',
+            Green: 'border-l-green-500',
+          }[group.companyPriority || 'Green'];
+
+          return (
+            <div 
+              key={group.company.id} 
+              className={`bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 ${priorityBorderColor} overflow-hidden transition-shadow hover:shadow-md`}
+            >
+              {/* Company Header */}
+              <div className="bg-gradient-to-r from-gray-50 to-white px-6 py-4 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm">
+                      <Building2 className="h-5 w-5 text-white" />
+                    </div>
+                    <div>
+                      <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
+                      <p className="text-sm text-gray-500 mt-0.5">
+                        {group.vacancies.length} vacature{group.vacancies.length !== 1 ? 's' : ''}
+                      </p>
+                    </div>
+                  </div>
+                  <PriorityBadge priority={group.companyPriority || 'Green'} />
+                </div>
+              </div>
+
+              {/* Table */}
+              <div>
+                <table className="w-full border-collapse">
+                      <colgroup>
+                        <col className="w-[35%]" />
+                        <col className="w-[12%]" />
+                        <col className="w-[10%]" />
+                        <col className="w-[8%]" />
+                        <col className="w-[12%]" />
+                        {userRole === 'admin' && <col className="w-[13%]" />}
+                      </colgroup>
+                      <thead>
+                        <tr className="bg-gray-50 border-b border-gray-200">
+                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Vacature</th>
+                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Strategie</th>
+                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Hiring</th>
+                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Pijn</th>
+                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Prioriteit</th>
+                          {userRole === 'admin' && (
+                            <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Acties</th>
+                          )}
+                        </tr>
+                      </thead>
                 <tbody>
                   {group.vacancies.map((vacancy) => (
                     <VacancyRow
@@ -166,11 +334,14 @@ export default function Dashboard() {
                     />
                   ))}
                 </tbody>
-              </table>
+                </table>
+              </div>
             </div>
-          </div>
-        ))
-      )}
+          );
+        })
+          )}
+        </div>
+      </main>
     </div>
   );
 }

@@ -4,7 +4,10 @@
  */
 
 import { RecruiteeJob, RecruiteeCompany } from './recruitee';
-import { VacancyPriority, PriorityColor } from './database';
+import { VacancyPriority } from './database';
+
+// Re-export PriorityColor voor gebruik in andere bestanden
+export type PriorityColor = 'Red' | 'Orange' | 'Green';
 
 export interface VacancyWithPriority {
   // Recruitee data
@@ -21,6 +24,7 @@ export interface VacancyWithPriority {
 export interface CompanyGroup {
   company: RecruiteeCompany;
   vacancies: VacancyWithPriority[];
+  companyPriority?: PriorityColor; // Hoogste priority van alle vacatures binnen dit bedrijf
 }
 
 export interface PriorityFormData {

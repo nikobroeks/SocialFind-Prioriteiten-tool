@@ -31,7 +31,7 @@ export default async function HomePage() {
   const isAdminEmail = user.email && adminEmails.includes(user.email.toLowerCase());
   
   // Als admin email, probeer automatisch rol toe te wijzen
-  if (isAdminEmail) {
+  if (isAdminEmail && user.email) {
     try {
       const { data: existingRole } = await supabase
         .from('user_roles')
@@ -47,7 +47,7 @@ export default async function HomePage() {
             user_id: user.id,
             email: user.email.toLowerCase(),
             role: 'admin',
-          });
+          } as any);
 
         if (!insertError) {
           // Refresh de query
@@ -81,29 +81,24 @@ export default async function HomePage() {
   }
 
   return (
-    <main className="container mx-auto py-8 px-4">
-      <div className="flex items-center justify-between mb-8">
-        <h1 className="text-3xl font-bold">Prioriteiten Dashboard</h1>
-        <LogoutButton />
-      </div>
-      {!roleData && (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded mb-4">
-          <p className="text-sm mb-2">
-            Je hebt nog geen rol toegewezen gekregen. Je kunt de applicatie bekijken maar niet bewerken.
-          </p>
-          {isAdminEmail && (
-            <div>
-              <p className="text-sm mb-2">
-                Als je een admin email hebt ({user.email}), klik op de knop hieronder om je admin rol toe te wijzen:
+    <>
+      {!roleData && user.email && (
+        <div className="fixed top-16 left-0 right-0 z-50 bg-yellow-50 border-b border-yellow-200 shadow-sm">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-yellow-800">
+                Je hebt nog geen rol toegewezen gekregen. Je kunt de applicatie bekijken maar niet bewerken.
               </p>
-              <AssignRoleButton userEmail={user.email} userId={user.id} />
+              {isAdminEmail && (
+                <AssignRoleButton userEmail={user.email} userId={user.id} />
+              )}
             </div>
-          )}
+          </div>
         </div>
       )}
       <Dashboard />
-      </main>
-    );
+    </>
+  );
   } catch (error) {
     console.error('Homepage error:', error);
     redirect('/login');

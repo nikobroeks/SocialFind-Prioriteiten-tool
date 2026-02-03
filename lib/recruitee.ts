@@ -6,6 +6,7 @@
  */
 
 import { RecruiteeApiResponse, RecruiteeJob, RecruiteeCompany } from '@/types/recruitee';
+import { extractCompanyFromTitle, getCompanyId } from './company-extractor';
 
 const RECRUITEE_API_KEY = process.env.RECRUITEE_API_KEY;
 const RECRUITEE_COMPANY_ID = process.env.RECRUITEE_COMPANY_ID;
@@ -121,15 +122,25 @@ export async function fetchRecruiteeJobs(
                        parseInt(RECRUITEE_COMPANY_ID!); // Fallback naar de company ID uit de URL
       
       // Probeer company naam uit verschillende velden
-      const companyName = job.company?.name ||
-                         job.company_name || 
-                         job.companyName ||
-                         job.department?.company?.name ||
-                         'SocialFind'; // Fallback naam
+      // EERST proberen uit de titel te halen (klantbedrijf)
+      const companyNameFromTitle = extractCompanyFromTitle(job.title || '');
+      
+      const companyName = companyNameFromTitle !== 'Onbekend Bedrijf' 
+        ? companyNameFromTitle
+        : job.company?.name ||
+          job.company_name || 
+          job.companyName ||
+          job.department?.company?.name ||
+          'Onbekend Bedrijf'; // Fallback naam
+      
+      // Gebruik een string ID voor de company (op basis van naam) voor groepering
+      const companyStringId = getCompanyId(companyName);
       
       return {
         ...job,
         company_id: companyId,
+        // Gebruik de string ID als unieke identifier voor groepering
+        company_string_id: companyStringId,
         company: {
           id: companyId,
           name: companyName,
