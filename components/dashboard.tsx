@@ -68,12 +68,58 @@ export default function Dashboard() {
 
   const companyHires = companyHiresData?.companyHires || {};
   
+  // Helper function to normalize company names for matching
+  const normalizeCompanyName = (name: string): string => {
+    return name
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, ' ')
+      .replace(/\./g, '')
+      .replace(/,/g, '')
+      .replace(/-/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  };
+  
+  // Create a lookup map with normalized keys for better matching
+  const companyHiresMap = new Map<string, number>();
+  Object.entries(companyHires).forEach(([name, count]) => {
+    const normalized = normalizeCompanyName(name);
+    // Store both original and normalized for lookup
+    companyHiresMap.set(normalized, count as number);
+    companyHiresMap.set(name, count as number); // Also keep original for exact match
+  });
+  
+  // Helper to find hires count for a company (with fuzzy matching)
+  const getCompanyHires = (companyName: string): number => {
+    const normalized = normalizeCompanyName(companyName);
+    // Try exact match first
+    if (companyHiresMap.has(companyName)) {
+      return companyHiresMap.get(companyName) || 0;
+    }
+    // Try normalized match
+    if (companyHiresMap.has(normalized)) {
+      return companyHiresMap.get(normalized) || 0;
+    }
+    // Try partial match (check if any key contains the company name or vice versa)
+    for (const [key, count] of companyHiresMap.entries()) {
+      if (normalized.includes(key) || key.includes(normalized)) {
+        return count;
+      }
+    }
+    return 0;
+  };
+  
   // Debug: log company hires data
   if (companyHiresData) {
     console.log('[DASHBOARD] Company hires data:', {
       totalHires: companyHiresData.totalHires,
       companyCount: Object.keys(companyHires).length,
       sampleCompanies: Object.entries(companyHires).slice(0, 5),
+      sampleJobCompanies: companyGroupsWithPriority.slice(0, 3).map(g => ({
+        name: g.company.name,
+        hires: getCompanyHires(g.company.name),
+      })),
     });
   }
 
@@ -333,13 +379,16 @@ export default function Dashboard() {
                         <p className="text-sm text-gray-500">
                           {group.vacancies.length} vacature{group.vacancies.length !== 1 ? 's' : ''}
                         </p>
-                        {companyHires[group.company.name] !== undefined && companyHires[group.company.name] > 0 && (
-                          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
-                            <Users className="h-3 w-3 text-green-600" />
-                            <span className="text-xs font-semibold text-green-700">{companyHires[group.company.name]}</span>
-                            <span className="text-xs text-green-600">hires (90d)</span>
-                          </div>
-                        )}
+                        {(() => {
+                          const hiresCount = getCompanyHires(group.company.name);
+                          return hiresCount > 0 && (
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
+                              <Users className="h-3 w-3 text-green-600" />
+                              <span className="text-xs font-semibold text-green-700">{hiresCount}</span>
+                              <span className="text-xs text-green-600">hires (90d)</span>
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   </div>
