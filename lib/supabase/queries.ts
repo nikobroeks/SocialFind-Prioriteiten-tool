@@ -1,0 +1,135 @@
+/**
+ * Supabase database queries voor vacancy priorities
+ */
+
+import { supabase } from './client';
+import { VacancyPriority, PriorityFormData } from '@/types/database';
+import { calculatePriority } from '@/lib/utils';
+
+/**
+ * Haalt alle prioriteiten op
+ */
+export async function getAllPriorities(): Promise<VacancyPriority[]> {
+  const { data, error } = await supabase
+    .from('vacancy_priorities')
+    .select('*')
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    throw new Error(`Error fetching priorities: ${error.message}`);
+  }
+
+  return data || [];
+}
+
+/**
+ * Haalt prioriteit op voor een specifieke vacature
+ */
+export async function getPriorityByJobId(
+  jobId: number,
+  companyId: number
+): Promise<VacancyPriority | null> {
+  const { data, error } = await supabase
+    .from('vacancy_priorities')
+    .select('*')
+    .eq('recruitee_job_id', jobId)
+    .eq('recruitee_company_id', companyId)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // Not found
+      return null;
+    }
+    throw new Error(`Error fetching priority: ${error.message}`);
+  }
+
+  return data;
+}
+
+/**
+ * Creëert of update een prioriteit
+ */
+export async function upsertPriority(
+  jobId: number,
+  companyId: number,
+  formData: PriorityFormData
+): Promise<VacancyPriority> {
+  // Bereken de calculated priority
+  const calculatedPriority = calculatePriority(
+    formData.strategy_score,
+    formData.hiring_chance,
+    formData.client_pain
+  );
+
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+
+  const priorityData = {
+    recruitee_job_id: jobId,
+    recruitee_company_id: companyId,
+    strategy_score: formData.strategy_score,
+    hiring_chance: formData.hiring_chance,
+    client_pain: formData.client_pain,
+    calculated_priority: calculatedPriority,
+    manual_override: formData.manual_override,
+    notes: formData.notes,
+    updated_by: userId || null,
+  };
+
+  const { data, error } = await supabase
+    .from('vacancy_priorities')
+    .upsert(priorityData, {
+      onConflict: 'recruitee_job_id,recruitee_company_id',
+    })
+    .select()
+    .single();
+
+  if (error) {
+    throw new Error(`Error upserting priority: ${error.message}`);
+  }
+
+  return data;
+}
+
+/**
+ * Verwijdert een prioriteit
+ */
+export async function deletePriority(
+  jobId: number,
+  companyId: number
+): Promise<void> {
+  const { error } = await supabase
+    .from('vacancy_priorities')
+    .delete()
+    .eq('recruitee_job_id', jobId)
+    .eq('recruitee_company_id', companyId);
+
+  if (error) {
+    throw new Error(`Error deleting priority: ${error.message}`);
+  }
+}
+
+/**
+ * Haalt de rol van de huidige gebruiker op
+ */
+export async function getUserRole(): Promise<'admin' | 'viewer' | null> {
+  const { data: userData } = await supabase.auth.getUser();
+  
+  if (!userData?.user?.id) {
+    return null;
+  }
+
+  const { data, error } = await supabase
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userData.user.id)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.role as 'admin' | 'viewer';
+}
+
