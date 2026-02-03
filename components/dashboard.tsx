@@ -240,8 +240,14 @@ export default function Dashboard() {
       id: g.company.id,
       name: g.company.name,
       priority: g.companyPriority,
-      vacanciesCount: g.vacancies.length
-    }))
+      vacanciesCount: g.vacancies.length,
+      hires: getCompanyHires(g.company.name),
+    })),
+    companyHiresData: companyHiresData ? {
+      totalHires: companyHiresData.totalHires,
+      companyCount: Object.keys(companyHires).length,
+      sampleCompanies: Object.entries(companyHires).slice(0, 5),
+    } : null,
   });
 
   // Calculate totals
