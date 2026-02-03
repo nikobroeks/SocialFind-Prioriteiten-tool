@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('');
@@ -109,11 +110,23 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
+    <main className="flex min-h-screen items-center justify-center px-4 bg-gray-50">
       <div className="w-full max-w-md space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold text-center">SocialFind Prioriteiten Dashboard</h1>
-          <p className="mt-2 text-center text-sm text-muted-foreground">
+        <div className="text-center">
+          <div className="flex justify-center mb-4">
+            <div className="relative w-20 h-20">
+              <Image
+                src="/socialfind-logo.png"
+                alt="SocialFind Logo"
+                fill
+                className="object-contain"
+                priority
+              />
+            </div>
+          </div>
+          <h1 className="text-3xl font-bold text-gray-900">SocialFind</h1>
+          <p className="mt-1 text-lg text-gray-600">Prioriteiten Dashboard</p>
+          <p className="mt-4 text-sm text-gray-500">
             Log in om toegang te krijgen
           </p>
         </div>

@@ -1,7 +1,8 @@
 'use client';
 
-import { Building2, Briefcase, LogOut } from 'lucide-react';
+import { Building2, Briefcase } from 'lucide-react';
 import { LogoutButton } from './logout-button';
+import Image from 'next/image';
 
 interface DashboardHeaderProps {
   totalCompanies: number;
@@ -15,9 +16,15 @@ export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHea
         <div className="flex items-center justify-between h-14">
           {/* Logo & Title */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2">
-              <div className="w-9 h-9 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center">
-                <Briefcase className="h-5 w-5 text-white" />
+            <div className="flex items-center gap-3">
+              <div className="relative w-10 h-10 flex-shrink-0">
+                <Image
+                  src="/socialfind-logo.png"
+                  alt="SocialFind Logo"
+                  fill
+                  className="object-contain"
+                  priority
+                />
               </div>
               <div>
                 <h1 className="text-lg font-bold text-gray-900">SocialFind</h1>
