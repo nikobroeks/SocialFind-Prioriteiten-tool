@@ -203,6 +203,63 @@ CREATE TRIGGER update_recruitee_cache_updated_at
   EXECUTE FUNCTION public.update_updated_at_column();
 
 -- ============================================
+-- Job Visibility Table
+-- ============================================
+-- Deze tabel slaat op welke jobs zichtbaar zijn in het dashboard
+-- Standaard zijn alle jobs zichtbaar (is_visible = true)
+CREATE TABLE public.job_visibility (
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  recruitee_job_id INTEGER NOT NULL,
+  recruitee_company_id INTEGER NOT NULL,
+  is_visible BOOLEAN DEFAULT TRUE,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_by UUID REFERENCES auth.users(id),
+  
+  -- Unieke constraint: één visibility setting per job
+  UNIQUE(recruitee_job_id, recruitee_company_id)
+);
+
+-- Indexen voor snelle queries
+CREATE INDEX idx_job_visibility_job_id ON public.job_visibility(recruitee_job_id);
+CREATE INDEX idx_job_visibility_company_id ON public.job_visibility(recruitee_company_id);
+CREATE INDEX idx_job_visibility_is_visible ON public.job_visibility(is_visible);
+
+-- RLS Policies voor job visibility
+ALTER TABLE public.job_visibility ENABLE ROW LEVEL SECURITY;
+
+-- Iedereen kan visibility lezen
+CREATE POLICY "Authenticated users can view job visibility"
+  ON public.job_visibility
+  FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+-- Alleen admins kunnen visibility aanmaken
+CREATE POLICY "Admins can insert job visibility"
+  ON public.job_visibility
+  FOR INSERT
+  WITH CHECK (public.is_admin(auth.uid()));
+
+-- Alleen admins kunnen visibility updaten
+CREATE POLICY "Admins can update job visibility"
+  ON public.job_visibility
+  FOR UPDATE
+  USING (public.is_admin(auth.uid()))
+  WITH CHECK (public.is_admin(auth.uid()));
+
+-- Alleen admins kunnen visibility verwijderen
+CREATE POLICY "Admins can delete job visibility"
+  ON public.job_visibility
+  FOR DELETE
+  USING (public.is_admin(auth.uid()));
+
+-- Trigger voor updated_at
+CREATE TRIGGER update_job_visibility_updated_at
+  BEFORE UPDATE ON public.job_visibility
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_updated_at_column();
+
+-- ============================================
 -- Initial Admin Users Setup
 -- ============================================
 -- Let op: Deze moeten handmatig worden ingevuld na het aanmaken van de users in Supabase Auth

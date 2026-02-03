@@ -14,11 +14,14 @@ import { KanbanView } from './kanban-view';
 import { CompactView } from './compact-view';
 import { useState, useEffect } from 'react';
 import { getUserRole } from '@/lib/supabase/queries';
-import { Building2, TrendingUp, AlertCircle, Users } from 'lucide-react';
+import { Building2, TrendingUp, AlertCircle, Users, Settings } from 'lucide-react';
+import { CompanyJobsModal } from './company-jobs-modal';
+import { getAllJobVisibility } from '@/lib/supabase/job-visibility';
 
 export default function Dashboard() {
   const [userRole, setUserRole] = useState<'admin' | 'viewer' | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [selectedCompany, setSelectedCompany] = useState<{ name: string; id: number; jobs: RecruiteeJob[] } | null>(null);
 
   // Fetch user role
   const { data: roleData } = useQuery({
@@ -42,6 +45,19 @@ export default function Dashboard() {
     queryFn: getAllPriorities,
     staleTime: 15 * 60 * 1000, // 15 minutes
     gcTime: 60 * 60 * 1000, // 60 minutes cache
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
+    retry: 1,
+  });
+
+  // Fetch job visibility settings
+  const { data: jobVisibility = [] } = useQuery({
+    queryKey: ['job-visibility'],
+    queryFn: getAllJobVisibility,
+    staleTime: 15 * 60 * 1000,
+    gcTime: 60 * 60 * 1000,
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     refetchOnReconnect: false,
