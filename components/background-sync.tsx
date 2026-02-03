@@ -92,8 +92,8 @@ export function BackgroundSync() {
       } else {
         isActiveRef.current = true;
         console.log('[BACKGROUND SYNC] Tab visible, resuming sync');
-        // Sync immediately when tab becomes visible again
-        syncData();
+        // Don't sync immediately - wait for next interval
+        // This prevents too many requests when switching tabs
       }
     };
 

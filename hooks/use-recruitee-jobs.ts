@@ -23,11 +23,13 @@ export function useRecruiteeJobs(options: FetchJobsOptions = {}) {
       const data = await response.json();
       return data.jobs as RecruiteeJob[];
     },
-    staleTime: 10 * 60 * 1000, // 10 minutes - jobs don't change that often
-    gcTime: 30 * 60 * 1000, // 30 minutes cache
+    staleTime: 15 * 60 * 1000, // 15 minutes - jobs don't change that often
+    gcTime: 60 * 60 * 1000, // 60 minutes cache
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     refetchOnReconnect: false,
+    refetchInterval: false,
+    retry: 1,
   });
 }
 

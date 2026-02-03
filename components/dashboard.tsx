@@ -40,10 +40,13 @@ export default function Dashboard() {
   const { data: priorities = [], isLoading: prioritiesLoading } = useQuery({
     queryKey: ['priorities'],
     queryFn: getAllPriorities,
-    staleTime: 10 * 60 * 1000, // 10 minutes
-    gcTime: 30 * 60 * 1000, // 30 minutes cache
+    staleTime: 15 * 60 * 1000, // 15 minutes
+    gcTime: 60 * 60 * 1000, // 60 minutes cache
     refetchOnWindowFocus: false,
     refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
+    retry: 1,
   });
 
   // Fetch company hires (last 90 days) - heavily cached
@@ -54,11 +57,13 @@ export default function Dashboard() {
       if (!response.ok) throw new Error('Failed to fetch company hires');
       return response.json();
     },
-    staleTime: 15 * 60 * 1000, // 15 minutes - hires don't change that often
+    staleTime: 20 * 60 * 1000, // 20 minutes - hires don't change that often
     gcTime: 60 * 60 * 1000, // 1 hour cache
     refetchOnWindowFocus: false,
     refetchOnMount: false,
     refetchOnReconnect: false,
+    refetchInterval: false,
+    retry: 1,
   });
 
   const companyHires = companyHiresData?.companyHires || {};
