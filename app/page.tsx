@@ -85,8 +85,6 @@ export default async function HomePage() {
 
   return (
     <>
-      <PreloadTrigger />
-      <BackgroundSync />
       {!roleData && user.email && (
         <div className="fixed top-16 left-0 right-0 z-50 bg-yellow-50 border-b border-yellow-200 shadow-sm">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">

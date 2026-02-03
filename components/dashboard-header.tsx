@@ -2,6 +2,7 @@
 
 import { Building2, Briefcase, TrendingUp } from 'lucide-react';
 import { LogoutButton } from './logout-button';
+import { DataRefreshButton } from './data-refresh-button';
 import Image from 'next/image';
 
 interface DashboardHeaderProps {
@@ -58,6 +59,7 @@ export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHea
               <TrendingUp className="h-4 w-4" />
               Hires
             </a>
+            <DataRefreshButton />
             <LogoutButton />
           </div>
         </div>
