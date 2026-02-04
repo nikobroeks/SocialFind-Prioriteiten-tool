@@ -4,7 +4,7 @@ Interne webapplicatie voor recruitment weekstarts prioriteitsbeheer.
 
 ## Tech Stack
 
-- **Framework**: Next.js 15 (App Router)
+- **Framework**: Next.js 16 (App Router)
 - **Taal**: TypeScript
 - **Styling**: Tailwind CSS + shadcn/ui components
 - **Backend/DB**: Supabase (PostgreSQL + Auth)

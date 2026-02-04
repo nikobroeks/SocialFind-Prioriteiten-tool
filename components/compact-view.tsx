@@ -2,7 +2,7 @@
 
 import { VacancyWithPriority, CompanyGroup } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
-import { Edit2, Building2, Users } from 'lucide-react';
+import { Edit2, Building2, Users, Search, Inbox } from 'lucide-react';
 import { useState } from 'react';
 import { PriorityModal } from './priority-modal';
 
@@ -10,9 +10,10 @@ interface CompactViewProps {
   companyGroups: CompanyGroup[];
   isAdmin: boolean;
   companyHires?: Record<string, number>;
+  searchQuery?: string;
 }
 
-export function CompactView({ companyGroups, isAdmin, companyHires = {} }: CompactViewProps) {
+export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQuery = '' }: CompactViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithPriority | null>(null);
 
@@ -21,12 +22,29 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {} }: Compa
     setIsModalOpen(true);
   };
 
+  if (companyGroups.length === 0) {
+    return (
+      <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-200">
+        <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+        <p className="text-lg font-medium text-gray-900 mb-2">
+          {searchQuery ? 'Geen resultaten gevonden' : 'Geen bedrijven beschikbaar'}
+        </p>
+        <p className="text-sm text-gray-500">
+          {searchQuery 
+            ? `Geen bedrijven of vacatures gevonden voor "${searchQuery}"`
+            : 'Er zijn momenteel geen bedrijven om weer te geven.'
+          }
+        </p>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className="space-y-4">
-        {companyGroups.map((group) => (
+        {companyGroups.map((group, index) => (
           <div
-            key={group.company.id}
+            key={`compact-company-${index}-${group.company.id}`}
             className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
           >
             {/* Company Header */}
@@ -92,7 +110,15 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {} }: Compa
 
             {/* Vacancies List */}
             <div className="divide-y divide-gray-100">
-              {group.vacancies.map((vacancy) => (
+              {group.vacancies.length === 0 ? (
+                <div className="px-4 py-8 text-center">
+                  <Inbox className="h-6 w-6 text-gray-300 mx-auto mb-2" />
+                  <p className="text-xs text-gray-400">
+                    {searchQuery ? 'Geen vacatures gevonden voor deze zoekopdracht' : 'Geen vacatures beschikbaar'}
+                  </p>
+                </div>
+              ) : (
+                group.vacancies.map((vacancy) => (
                 <div
                   key={vacancy.job.id}
                   className="px-4 py-3 hover:bg-gray-50 transition-colors"
@@ -135,7 +161,8 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {} }: Compa
                     )}
                   </div>
                 </div>
-              ))}
+                ))
+              )}
             </div>
           </div>
         ))}

@@ -2,7 +2,7 @@
 
 ## Overzicht
 
-De SocialFind Prioriteiten Dashboard is een Next.js 15 applicatie die vacatures ophaalt van Recruitee en prioriteits-metadata beheert in Supabase.
+De SocialFind Prioriteiten Dashboard is een Next.js 16 applicatie die vacatures ophaalt van Recruitee en prioriteits-metadata beheert in Supabase.
 
 ## Project Structuur
 

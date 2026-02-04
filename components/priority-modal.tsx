@@ -1,13 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { VacancyWithPriority } from '@/types/dashboard';
 import { PriorityFormData } from '@/types/dashboard';
-import { upsertPriority } from '@/lib/supabase/queries';
-import { useQueryClient } from '@tanstack/react-query';
 import { X } from 'lucide-react';
 import { PriorityBadge } from './priority-badge';
 import { calculatePriority, getDisplayPriority } from '@/lib/utils';
+import { usePriorityMutation } from '@/hooks/use-priority-mutation';
 
 interface PriorityModalProps {
   vacancy: VacancyWithPriority;
@@ -16,7 +15,7 @@ interface PriorityModalProps {
 }
 
 export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) {
-  const queryClient = useQueryClient();
+  const modalRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState<PriorityFormData>({
     strategy_score: vacancy.priority?.strategy_score || null,
     hiring_chance: vacancy.priority?.hiring_chance || null,
@@ -24,7 +23,14 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
     manual_override: vacancy.priority?.manual_override || null,
     notes: vacancy.priority?.notes || null,
   });
-  const [saving, setSaving] = useState(false);
+
+  const mutation = usePriorityMutation({
+    jobId: vacancy.job.id,
+    companyId: vacancy.company.id,
+    onSuccess: () => {
+      onClose();
+    },
+  });
 
   const calculatedPriority = calculatePriority(
     formData.strategy_score,
@@ -37,48 +43,68 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
     formData.manual_override
   );
 
+  // Focus management for accessibility
+  useEffect(() => {
+    if (isOpen && modalRef.current) {
+      const firstInput = modalRef.current.querySelector('input, select, textarea') as HTMLElement;
+      firstInput?.focus();
+    }
+  }, [isOpen]);
+
+  // Keyboard navigation - ESC to close
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', handleEscape);
+    return () => document.removeEventListener('keydown', handleEscape);
+  }, [isOpen, onClose]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSaving(true);
-
-    try {
-      await upsertPriority(
-        vacancy.job.id,
-        vacancy.company.id,
-        formData
-      );
-      await queryClient.invalidateQueries({ queryKey: ['priorities'] });
-      onClose();
-    } catch (error) {
-      console.error('Error saving priority:', error);
-      alert('Er is een fout opgetreden bij het opslaan');
-    } finally {
-      setSaving(false);
-    }
+    mutation.mutate(formData);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-      <div className="bg-background rounded-lg shadow-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto m-4">
-        <div className="flex items-center justify-between p-6 border-b">
-          <h2 className="text-xl font-semibold">{vacancy.job.title}</h2>
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="modal-title"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={modalRef}
+        className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between p-4 sm:p-6 border-b sticky top-0 bg-white z-10">
+          <h2 id="modal-title" className="text-lg sm:text-xl font-semibold text-gray-900">
+            {vacancy.job.title}
+          </h2>
           <button
             onClick={onClose}
-            className="text-muted-foreground hover:text-foreground"
+            className="text-gray-500 hover:text-gray-700 p-1 rounded-md hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+            aria-label="Sluit dialoog"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
+        <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6">
           {/* Strategie Score */}
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label htmlFor="strategy-score" className="block text-sm font-medium mb-2 text-gray-700">
               Strategie Score
             </label>
             <select
+              id="strategy-score"
               value={formData.strategy_score || ''}
               onChange={(e) =>
                 setFormData({
@@ -86,7 +112,8 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
                   strategy_score: e.target.value as any || null,
                 })
               }
-              className="w-full rounded-md border border-input bg-background px-3 py-2"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              aria-required="false"
             >
               <option value="">Selecteer...</option>
               <option value="Key Account">Key Account</option>
@@ -97,10 +124,11 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
 
           {/* Hiring Chance */}
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label htmlFor="hiring-chance" className="block text-sm font-medium mb-2 text-gray-700">
               Hiring Chance
             </label>
             <select
+              id="hiring-chance"
               value={formData.hiring_chance || ''}
               onChange={(e) =>
                 setFormData({
@@ -108,7 +136,8 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
                   hiring_chance: e.target.value as any || null,
                 })
               }
-              className="w-full rounded-md border border-input bg-background px-3 py-2"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              aria-required="false"
             >
               <option value="">Selecteer...</option>
               <option value="High">High</option>
@@ -119,33 +148,35 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
 
           {/* Client Pain */}
           <div>
-            <label className="flex items-center gap-2">
+            <label className="flex items-center gap-2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={formData.client_pain}
                 onChange={(e) =>
                   setFormData({ ...formData, client_pain: e.target.checked })
                 }
-                className="rounded border-input"
+                className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 focus:ring-2"
+                aria-label="Client Pain (Onrust/Escalatie)"
               />
-              <span className="text-sm font-medium">Client Pain (Onrust/Escalatie)</span>
+              <span className="text-sm font-medium text-gray-700">Client Pain (Onrust/Escalatie)</span>
             </label>
           </div>
 
           {/* Calculated Priority Preview */}
-          <div className="p-4 bg-muted rounded-md">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-medium">Berekende Prioriteit:</span>
+          <div className="p-4 bg-gray-50 rounded-md border border-gray-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <span className="text-sm font-medium text-gray-700">Berekende Prioriteit:</span>
               <PriorityBadge priority={calculatedPriority} />
             </div>
           </div>
 
           {/* Manual Override */}
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label htmlFor="manual-override" className="block text-sm font-medium mb-2 text-gray-700">
               Handmatige Override (optioneel)
             </label>
             <select
+              id="manual-override"
               value={formData.manual_override || ''}
               onChange={(e) =>
                 setFormData({
@@ -153,7 +184,8 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
                   manual_override: e.target.value as any || null,
                 })
               }
-              className="w-full rounded-md border border-input bg-background px-3 py-2"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              aria-required="false"
             >
               <option value="">Geen override</option>
               <option value="Red">Red</option>
@@ -163,44 +195,47 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
           </div>
 
           {/* Final Display Priority */}
-          <div className="p-4 bg-primary/10 rounded-md">
-            <div className="flex items-center justify-between">
-              <span className="text-sm font-semibold">Weergave Prioriteit:</span>
+          <div className="p-4 bg-orange-50 rounded-md border border-orange-200">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+              <span className="text-sm font-semibold text-gray-900">Weergave Prioriteit:</span>
               <PriorityBadge priority={displayPriority} />
             </div>
           </div>
 
           {/* Notes */}
           <div>
-            <label className="block text-sm font-medium mb-2">
+            <label htmlFor="notes" className="block text-sm font-medium mb-2 text-gray-700">
               Notities
             </label>
             <textarea
+              id="notes"
               value={formData.notes || ''}
               onChange={(e) =>
                 setFormData({ ...formData, notes: e.target.value || null })
               }
               rows={4}
-              className="w-full rounded-md border border-input bg-background px-3 py-2"
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               placeholder="Optionele notities..."
+              aria-required="false"
             />
           </div>
 
           {/* Actions */}
-          <div className="flex justify-end gap-3 pt-4 border-t">
+          <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-sm font-medium rounded-md border border-input hover:bg-muted"
+              className="px-4 py-2 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-colors"
             >
               Annuleren
             </button>
             <button
               type="submit"
-              disabled={saving}
-              className="px-4 py-2 text-sm font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              disabled={mutation.isPending}
+              className="px-4 py-2 text-sm font-medium rounded-md bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 transition-colors"
+              aria-busy={mutation.isPending}
             >
-              {saving ? 'Opslaan...' : 'Opslaan'}
+              {mutation.isPending ? 'Opslaan...' : 'Opslaan'}
             </button>
           </div>
         </form>

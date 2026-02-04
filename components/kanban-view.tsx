@@ -2,7 +2,7 @@
 
 import { VacancyWithPriority } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
-import { Edit2 } from 'lucide-react';
+import { Edit2, Search, Inbox } from 'lucide-react';
 import { useState } from 'react';
 import { PriorityModal } from './priority-modal';
 import { PriorityColor } from '@/types/dashboard';
@@ -10,9 +10,10 @@ import { PriorityColor } from '@/types/dashboard';
 interface KanbanViewProps {
   vacancies: VacancyWithPriority[];
   isAdmin: boolean;
+  searchQuery?: string;
 }
 
-export function KanbanView({ vacancies, isAdmin }: KanbanViewProps) {
+export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithPriority | null>(null);
 
@@ -26,6 +27,24 @@ export function KanbanView({ vacancies, isAdmin }: KanbanViewProps) {
     setSelectedVacancy(vacancy);
     setIsModalOpen(true);
   };
+
+  // Show empty state if no vacancies at all
+  if (vacancies.length === 0) {
+    return (
+      <div className="text-center py-16 bg-white rounded-xl shadow-sm border border-gray-200">
+        <Search className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+        <p className="text-lg font-medium text-gray-900 mb-2">
+          {searchQuery ? 'Geen resultaten gevonden' : 'Geen vacatures beschikbaar'}
+        </p>
+        <p className="text-sm text-gray-500">
+          {searchQuery 
+            ? `Geen vacatures gevonden voor "${searchQuery}"`
+            : 'Er zijn momenteel geen vacatures om weer te geven.'
+          }
+        </p>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -54,8 +73,11 @@ export function KanbanView({ vacancies, isAdmin }: KanbanViewProps) {
               {/* Cards */}
               <div className="flex-1 p-4 space-y-3 overflow-y-auto">
                 {columnVacancies.length === 0 ? (
-                  <div className="text-center py-8 text-gray-400 text-sm">
-                    Geen vacatures
+                  <div className="text-center py-12">
+                    <Inbox className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-400">
+                      {searchQuery ? 'Geen vacatures gevonden' : 'Geen vacatures in deze categorie'}
+                    </p>
                   </div>
                 ) : (
                   columnVacancies.map((vacancy) => (
