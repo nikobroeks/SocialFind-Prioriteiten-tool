@@ -1,42 +1,42 @@
-import { createClient } from '@/lib/supabase/client';
+import { createClient } from '@/lib/supabase/server';
 
 export interface JobVisibility {
   id: string;
   recruitee_job_id: number;
   recruitee_company_id: number;
+  company_name: string;
   is_visible: boolean;
   created_at: string;
   updated_at: string;
-  updated_by: string | null;
 }
 
 /**
- * Haalt alle job visibility settings op
+ * Get visibility settings for all jobs
  */
 export async function getAllJobVisibility(): Promise<JobVisibility[]> {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('job_visibility')
     .select('*')
-    .order('updated_at', { ascending: false });
+    .order('company_name', { ascending: true });
 
   if (error) {
     console.error('Error fetching job visibility:', error);
-    throw error;
+    return [];
   }
 
   return (data || []) as JobVisibility[];
 }
 
 /**
- * Haalt visibility op voor een specifieke job
+ * Get visibility for a specific job
  */
 export async function getJobVisibility(
   jobId: number,
   companyId: number
 ): Promise<JobVisibility | null> {
-  const supabase = createClient();
+  const supabase = await createClient();
   
   const { data, error } = await supabase
     .from('job_visibility')
@@ -47,35 +47,32 @@ export async function getJobVisibility(
 
   if (error) {
     console.error('Error fetching job visibility:', error);
-    throw error;
+    return null;
   }
 
   return data as JobVisibility | null;
 }
 
 /**
- * Update of insert job visibility
+ * Set visibility for a job
  */
-export async function upsertJobVisibility(
+export async function setJobVisibility(
   jobId: number,
   companyId: number,
+  companyName: string,
   isVisible: boolean
 ): Promise<JobVisibility> {
-  const supabase = createClient();
-  
-  // Get current user
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error('User not authenticated');
-  }
 
   const { data, error } = await supabase
     .from('job_visibility')
     .upsert({
       recruitee_job_id: jobId,
       recruitee_company_id: companyId,
+      company_name: companyName,
       is_visible: isVisible,
-      updated_by: user.id,
+      updated_by: user?.id,
     } as any, {
       onConflict: 'recruitee_job_id,recruitee_company_id',
     })
@@ -83,7 +80,7 @@ export async function upsertJobVisibility(
     .single();
 
   if (error) {
-    console.error('Error upserting job visibility:', error);
+    console.error('Error setting job visibility:', error);
     throw error;
   }
 
@@ -91,36 +88,33 @@ export async function upsertJobVisibility(
 }
 
 /**
- * Bulk update job visibility voor meerdere jobs
+ * Set visibility for multiple jobs at once (by company)
  */
-export async function bulkUpdateJobVisibility(
-  updates: Array<{ jobId: number; companyId: number; isVisible: boolean }>
+export async function setCompanyJobsVisibility(
+  companyName: string,
+  companyId: number,
+  jobIds: number[],
+  isVisible: boolean
 ): Promise<void> {
-  const supabase = createClient();
-  
-  // Get current user
+  const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw new Error('User not authenticated');
-  }
 
-  // Upsert alle updates
-  const upserts = updates.map(update => ({
-    recruitee_job_id: update.jobId,
-    recruitee_company_id: update.companyId,
-    is_visible: update.isVisible,
-    updated_by: user.id,
+  const visibilityData = jobIds.map(jobId => ({
+    recruitee_job_id: jobId,
+    recruitee_company_id: companyId,
+    company_name: companyName,
+    is_visible: isVisible,
+    updated_by: user?.id,
   }));
 
   const { error } = await supabase
     .from('job_visibility')
-    .upsert(upserts as any, {
+    .upsert(visibilityData as any, {
       onConflict: 'recruitee_job_id,recruitee_company_id',
     });
 
   if (error) {
-    console.error('Error bulk updating job visibility:', error);
+    console.error('Error setting company jobs visibility:', error);
     throw error;
   }
 }
-

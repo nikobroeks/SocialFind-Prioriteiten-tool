@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import { fetchAllCandidatesAndApplications } from '@/lib/recruitee';
 
 /**
  * Get hires per company for the last 90 days
