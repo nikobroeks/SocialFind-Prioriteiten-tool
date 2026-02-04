@@ -26,27 +26,28 @@ export function VacancyRow({ vacancy, isAdmin }: VacancyRowProps) {
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
+                <span className="text-gray-500 block mb-1">Klant pijn</span>
+                <span className="text-gray-900 font-medium">
+                  {vacancy.priority?.client_pain_level || <span className="text-gray-400">-</span>}
+                </span>
+              </div>
+              <div>
+                <span className="text-gray-500 block mb-1">Tijdkritiek</span>
+                <span className="text-gray-900 font-medium">
+                  {vacancy.priority?.time_criticality || <span className="text-gray-400">-</span>}
+                </span>
+              </div>
+              <div>
                 <span className="text-gray-500 block mb-1">Strategie</span>
                 <span className="text-gray-900 font-medium">
-                  {vacancy.priority?.strategy_score || <span className="text-gray-400">-</span>}
+                  {vacancy.priority?.strategic_value || <span className="text-gray-400">-</span>}
                 </span>
               </div>
               <div>
-                <span className="text-gray-500 block mb-1">Hiring</span>
+                <span className="text-gray-500 block mb-1">Account</span>
                 <span className="text-gray-900 font-medium">
-                  {vacancy.priority?.hiring_chance || <span className="text-gray-400">-</span>}
+                  {vacancy.priority?.account_health || <span className="text-gray-400">-</span>}
                 </span>
-              </div>
-              <div>
-                <span className="text-gray-500 block mb-1">Pijn</span>
-                {vacancy.priority?.client_pain ? (
-                  <span className="inline-flex items-center gap-1 text-red-700 font-semibold">
-                    <span className="h-1.5 w-1.5 bg-red-600 rounded-full" aria-hidden="true"></span>
-                    Ja
-                  </span>
-                ) : (
-                  <span className="text-gray-500">Nee</span>
-                )}
               </div>
             </div>
             {isAdmin && (
@@ -71,28 +72,32 @@ export function VacancyRow({ vacancy, isAdmin }: VacancyRowProps) {
           </span>
         </td>
         <td className="p-3 text-xs text-gray-700 whitespace-nowrap">
-          <span aria-label={`Strategie score: ${vacancy.priority?.strategy_score || 'Niet ingesteld'}`}>
-            {vacancy.priority?.strategy_score || (
+          <span aria-label={`Klant pijn: ${vacancy.priority?.client_pain_level || 'Niet ingesteld'}`}>
+            {vacancy.priority?.client_pain_level || (
               <span className="text-gray-400" aria-hidden="true">-</span>
             )}
           </span>
         </td>
         <td className="p-3 text-xs text-gray-700 whitespace-nowrap">
-          <span aria-label={`Hiring chance: ${vacancy.priority?.hiring_chance || 'Niet ingesteld'}`}>
-            {vacancy.priority?.hiring_chance || (
+          <span aria-label={`Tijdkritiek: ${vacancy.priority?.time_criticality || 'Niet ingesteld'}`}>
+            {vacancy.priority?.time_criticality || (
               <span className="text-gray-400" aria-hidden="true">-</span>
             )}
           </span>
         </td>
-        <td className="p-3 text-xs whitespace-nowrap">
-          {vacancy.priority?.client_pain ? (
-            <span className="inline-flex items-center gap-1 text-red-700 font-semibold" aria-label="Client pain: Ja">
-              <span className="h-1.5 w-1.5 bg-red-600 rounded-full" aria-hidden="true"></span>
-              Ja
-            </span>
-          ) : (
-            <span className="text-gray-500" aria-label="Client pain: Nee">Nee</span>
-          )}
+        <td className="p-3 text-xs text-gray-700 whitespace-nowrap">
+          <span aria-label={`Strategische waarde: ${vacancy.priority?.strategic_value || 'Niet ingesteld'}`}>
+            {vacancy.priority?.strategic_value || (
+              <span className="text-gray-400" aria-hidden="true">-</span>
+            )}
+          </span>
+        </td>
+        <td className="p-3 text-xs text-gray-700 whitespace-nowrap">
+          <span aria-label={`Accountgezondheid: ${vacancy.priority?.account_health || 'Niet ingesteld'}`}>
+            {vacancy.priority?.account_health || (
+              <span className="text-gray-400" aria-hidden="true">-</span>
+            )}
+          </span>
         </td>
         <td className="p-3">
           <PriorityBadge priority={vacancy.displayPriority} />

@@ -27,10 +27,15 @@ export interface CompanyGroup {
   companyPriority?: PriorityColor; // Hoogste priority van alle vacatures binnen dit bedrijf
 }
 
+import { ClientPainLevel, TimeCriticality, StrategicValue, AccountHealth } from './database';
+
 export interface PriorityFormData {
-  strategy_score: 'Key Account' | 'Longterm' | 'Ad-hoc' | null;
-  hiring_chance: 'High' | 'Medium' | 'Low' | null;
-  client_pain: boolean;
+  // Nieuwe 4 pijlers
+  client_pain_level: ClientPainLevel | null;
+  time_criticality: TimeCriticality | null;
+  strategic_value: StrategicValue | null;
+  account_health: AccountHealth | null;
+  
   manual_override: PriorityColor | null;
   notes: string | null;
 }

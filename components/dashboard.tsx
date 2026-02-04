@@ -589,19 +589,21 @@ export default function Dashboard() {
                 {group.vacancies.length > 0 ? (
                   <table className="w-full border-collapse" role="table" aria-label={`Vacatures voor ${group.company.name}`}>
                     <colgroup>
-                      <col className="w-[35%]" />
+                      <col className="w-[25%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[12%]" />
                       <col className="w-[12%]" />
                       <col className="w-[10%]" />
-                      <col className="w-[8%]" />
-                      <col className="w-[12%]" />
-                      {userRole === 'admin' && <col className="w-[13%]" />}
+                      {userRole === 'admin' && <col className="w-[12%]" />}
                     </colgroup>
                     <thead className="hidden sm:table-header-group">
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Vacature</th>
+                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Klant pijn</th>
+                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Tijdkritiek</th>
                         <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Strategie</th>
-                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Hiring</th>
-                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Pijn</th>
+                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Account</th>
                         <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Prioriteit</th>
                         {userRole === 'admin' && (
                           <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Acties</th>

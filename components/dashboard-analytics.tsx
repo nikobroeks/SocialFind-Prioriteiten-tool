@@ -46,25 +46,37 @@ export function DashboardAnalytics({ companyGroups, vacancies, companyHires = {}
     .sort((a, b) => b.hires - a.hires)
     .slice(0, 5);
 
-  // Strategie score distributie
-  const strategyDistribution = {
-    'Key Account': vacancies.filter((v) => v.priority?.strategy_score === 'Key Account').length,
-    'Longterm': vacancies.filter((v) => v.priority?.strategy_score === 'Longterm').length,
-    'Ad-hoc': vacancies.filter((v) => v.priority?.strategy_score === 'Ad-hoc').length,
-    'Niet ingesteld': vacancies.filter((v) => !v.priority?.strategy_score).length,
+  // Klant pijn distributie
+  const clientPainDistribution = {
+    'Ja': vacancies.filter((v) => v.priority?.client_pain_level === 'Ja').length,
+    'Beginnend': vacancies.filter((v) => v.priority?.client_pain_level === 'Beginnend').length,
+    'Nee': vacancies.filter((v) => v.priority?.client_pain_level === 'Nee').length,
+    'Niet ingesteld': vacancies.filter((v) => !v.priority?.client_pain_level).length,
   };
 
-  // Hiring chance distributie
-  const hiringChanceDistribution = {
-    'High': vacancies.filter((v) => v.priority?.hiring_chance === 'High').length,
-    'Medium': vacancies.filter((v) => v.priority?.hiring_chance === 'Medium').length,
-    'Low': vacancies.filter((v) => v.priority?.hiring_chance === 'Low').length,
-    'Niet ingesteld': vacancies.filter((v) => !v.priority?.hiring_chance).length,
+  // Tijdkritiek distributie
+  const timeCriticalityDistribution = {
+    'Tegen het einde': vacancies.filter((v) => v.priority?.time_criticality === 'Tegen het einde van samenwerking').length,
+    'Lopend': vacancies.filter((v) => v.priority?.time_criticality === 'Lopend').length,
+    'Net begonnen': vacancies.filter((v) => v.priority?.time_criticality === 'Net begonnen').length,
+    'Niet ingesteld': vacancies.filter((v) => !v.priority?.time_criticality).length,
   };
 
-  // Client pain count
-  const clientPainCount = vacancies.filter((v) => v.priority?.client_pain).length;
-  const clientPainPercentage = totalVacancies > 0 ? Math.round((clientPainCount / totalVacancies) * 100) : 0;
+  // Strategische waarde distributie
+  const strategicValueDistribution = {
+    'A-klant': vacancies.filter((v) => v.priority?.strategic_value === 'A-klant').length,
+    'B-klant': vacancies.filter((v) => v.priority?.strategic_value === 'B-klant').length,
+    'C-klant': vacancies.filter((v) => v.priority?.strategic_value === 'C-klant').length,
+    'Niet ingesteld': vacancies.filter((v) => !v.priority?.strategic_value).length,
+  };
+
+  // Accountgezondheid distributie
+  const accountHealthDistribution = {
+    'Kans op churn': vacancies.filter((v) => v.priority?.account_health === 'Kans op churn').length,
+    'Onrustige stakeholder': vacancies.filter((v) => v.priority?.account_health === 'Onrustige stakeholder').length,
+    'Tevreden stakeholder': vacancies.filter((v) => v.priority?.account_health === 'Tevreden stakeholder').length,
+    'Niet ingesteld': vacancies.filter((v) => !v.priority?.account_health).length,
+  };
 
   return (
     <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 sm:p-6" aria-labelledby="analytics-heading">
@@ -112,13 +124,15 @@ export function DashboardAnalytics({ companyGroups, vacancies, companyHires = {}
           <p className="text-xs text-green-800 mt-1">Laag Prioriteit</p>
         </div>
 
-        <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-300" role="region" aria-label="Client pain statistieken">
+        <div className="bg-blue-50 rounded-lg p-3 sm:p-4 border border-blue-300" role="region" aria-label="Klant pijn statistieken">
           <div className="flex items-center justify-between mb-2">
             <TrendingUp className="h-4 w-4 sm:h-5 sm:w-5 text-blue-700" aria-hidden="true" />
-            <span className="text-xs font-medium text-blue-700">{clientPainPercentage}%</span>
+            <span className="text-xs font-medium text-blue-700">
+              {totalVacancies > 0 ? Math.round((clientPainDistribution['Ja'] / totalVacancies) * 100) : 0}%
+            </span>
           </div>
-          <p className="text-xl sm:text-2xl font-bold text-blue-700">{clientPainCount}</p>
-          <p className="text-xs text-blue-800 mt-1">Client Pain</p>
+          <p className="text-xl sm:text-2xl font-bold text-blue-700">{clientPainDistribution['Ja']}</p>
+          <p className="text-xs text-blue-800 mt-1">Klant Pijn (Ja)</p>
         </div>
       </div>
 
@@ -162,11 +176,32 @@ export function DashboardAnalytics({ companyGroups, vacancies, companyHires = {}
             </div>
           </div>
 
-          {/* Strategie score distributie */}
+          {/* Klant pijn distributie */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Strategie Score Distributie</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Klant Pijn Distributie</h3>
             <div className="space-y-2">
-              {Object.entries(strategyDistribution).map(([key, value]) => (
+              {Object.entries(clientPainDistribution).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">{key}:</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-32 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-red-500 h-2 rounded-full"
+                        style={{ width: `${totalVacancies > 0 ? (value / totalVacancies) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="w-8 text-right font-medium">{value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Tijdkritiek distributie */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Tijdkritiek Distributie</h3>
+            <div className="space-y-2">
+              {Object.entries(timeCriticalityDistribution).map(([key, value]) => (
                 <div key={key} className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">{key}:</span>
                   <div className="flex items-center gap-2">
@@ -183,17 +218,38 @@ export function DashboardAnalytics({ companyGroups, vacancies, companyHires = {}
             </div>
           </div>
 
-          {/* Hiring chance distributie */}
+          {/* Strategische waarde distributie */}
           <div>
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Hiring Chance Distributie</h3>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Strategische Waarde Distributie</h3>
             <div className="space-y-2">
-              {Object.entries(hiringChanceDistribution).map(([key, value]) => (
+              {Object.entries(strategicValueDistribution).map(([key, value]) => (
                 <div key={key} className="flex items-center justify-between text-sm">
                   <span className="text-gray-600">{key}:</span>
                   <div className="flex items-center gap-2">
                     <div className="w-32 bg-gray-200 rounded-full h-2">
                       <div
                         className="bg-blue-500 h-2 rounded-full"
+                        style={{ width: `${totalVacancies > 0 ? (value / totalVacancies) * 100 : 0}%` }}
+                      />
+                    </div>
+                    <span className="w-8 text-right font-medium">{value}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Accountgezondheid distributie */}
+          <div>
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Accountgezondheid Distributie</h3>
+            <div className="space-y-2">
+              {Object.entries(accountHealthDistribution).map(([key, value]) => (
+                <div key={key} className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">{key}:</span>
+                  <div className="flex items-center gap-2">
+                    <div className="w-32 bg-gray-200 rounded-full h-2">
+                      <div
+                        className="bg-purple-500 h-2 rounded-full"
                         style={{ width: `${totalVacancies > 0 ? (value / totalVacancies) * 100 : 0}%` }}
                       />
                     </div>

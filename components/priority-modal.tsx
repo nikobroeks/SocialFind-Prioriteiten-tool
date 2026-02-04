@@ -7,6 +7,7 @@ import { X } from 'lucide-react';
 import { PriorityBadge } from './priority-badge';
 import { calculatePriority, getDisplayPriority } from '@/lib/utils';
 import { usePriorityMutation } from '@/hooks/use-priority-mutation';
+import { ClientPainLevel, TimeCriticality, StrategicValue, AccountHealth } from '@/types/database';
 
 interface PriorityModalProps {
   vacancy: VacancyWithPriority;
@@ -17,9 +18,10 @@ interface PriorityModalProps {
 export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const [formData, setFormData] = useState<PriorityFormData>({
-    strategy_score: vacancy.priority?.strategy_score || null,
-    hiring_chance: vacancy.priority?.hiring_chance || null,
-    client_pain: vacancy.priority?.client_pain || false,
+    client_pain_level: vacancy.priority?.client_pain_level || null,
+    time_criticality: vacancy.priority?.time_criticality || null,
+    strategic_value: vacancy.priority?.strategic_value || null,
+    account_health: vacancy.priority?.account_health || null,
     manual_override: vacancy.priority?.manual_override || null,
     notes: vacancy.priority?.notes || null,
   });
@@ -33,9 +35,10 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
   });
 
   const calculatedPriority = calculatePriority(
-    formData.strategy_score,
-    formData.hiring_chance,
-    formData.client_pain
+    formData.client_pain_level,
+    formData.time_criticality,
+    formData.strategic_value,
+    formData.account_health
   );
 
   const displayPriority = getDisplayPriority(
@@ -98,68 +101,100 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
         </div>
 
         <form onSubmit={handleSubmit} className="p-4 sm:p-6 space-y-4 sm:space-y-6">
-          {/* Strategie Score */}
+          {/* Pijler 1: Voelt de klant pijn? */}
           <div>
-            <label htmlFor="strategy-score" className="block text-sm font-medium mb-2 text-gray-700">
-              Strategie Score
+            <label htmlFor="client-pain-level" className="block text-sm font-medium mb-2 text-gray-700">
+              Voelt de klant pijn?
             </label>
             <select
-              id="strategy-score"
-              value={formData.strategy_score || ''}
+              id="client-pain-level"
+              value={formData.client_pain_level || ''}
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  strategy_score: e.target.value as any || null,
+                  client_pain_level: (e.target.value as ClientPainLevel) || null,
                 })
               }
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               aria-required="false"
             >
               <option value="">Selecteer...</option>
-              <option value="Key Account">Key Account</option>
-              <option value="Longterm">Longterm</option>
-              <option value="Ad-hoc">Ad-hoc</option>
+              <option value="Nee">Nee (laag prio)</option>
+              <option value="Beginnend">Beginnend (medium prio)</option>
+              <option value="Ja">Ja (hoog prio)</option>
             </select>
           </div>
 
-          {/* Hiring Chance */}
+          {/* Pijler 2: Tijdkritiek */}
           <div>
-            <label htmlFor="hiring-chance" className="block text-sm font-medium mb-2 text-gray-700">
-              Hiring Chance
+            <label htmlFor="time-criticality" className="block text-sm font-medium mb-2 text-gray-700">
+              Tijdkritiek
             </label>
             <select
-              id="hiring-chance"
-              value={formData.hiring_chance || ''}
+              id="time-criticality"
+              value={formData.time_criticality || ''}
               onChange={(e) =>
                 setFormData({
                   ...formData,
-                  hiring_chance: e.target.value as any || null,
+                  time_criticality: (e.target.value as TimeCriticality) || null,
                 })
               }
               className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
               aria-required="false"
             >
               <option value="">Selecteer...</option>
-              <option value="High">High</option>
-              <option value="Medium">Medium</option>
-              <option value="Low">Low</option>
+              <option value="Net begonnen">Net begonnen (laag)</option>
+              <option value="Lopend">Lopend (medium)</option>
+              <option value="Tegen het einde van samenwerking">Tegen het einde van samenwerking (hoog)</option>
             </select>
           </div>
 
-          {/* Client Pain */}
+          {/* Pijler 3: Strategische waarde van klant */}
           <div>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={formData.client_pain}
-                onChange={(e) =>
-                  setFormData({ ...formData, client_pain: e.target.checked })
-                }
-                className="w-4 h-4 rounded border-gray-300 text-orange-600 focus:ring-orange-500 focus:ring-2"
-                aria-label="Client Pain (Onrust/Escalatie)"
-              />
-              <span className="text-sm font-medium text-gray-700">Client Pain (Onrust/Escalatie)</span>
+            <label htmlFor="strategic-value" className="block text-sm font-medium mb-2 text-gray-700">
+              Strategische waarde van klant
             </label>
+            <select
+              id="strategic-value"
+              value={formData.strategic_value || ''}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  strategic_value: (e.target.value as StrategicValue) || null,
+                })
+              }
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              aria-required="false"
+            >
+              <option value="">Selecteer...</option>
+              <option value="C-klant">C-klant (minder prio)</option>
+              <option value="B-klant">B-klant (medium prio)</option>
+              <option value="A-klant">A-klant (hoge prio)</option>
+            </select>
+          </div>
+
+          {/* Pijler 4: Accountgezondheid */}
+          <div>
+            <label htmlFor="account-health" className="block text-sm font-medium mb-2 text-gray-700">
+              Accountgezondheid
+            </label>
+            <select
+              id="account-health"
+              value={formData.account_health || ''}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  account_health: (e.target.value as AccountHealth) || null,
+                })
+              }
+              className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 focus:border-orange-500"
+              aria-required="false"
+            >
+              <option value="">Selecteer...</option>
+              <option value="Tevreden stakeholder">Tevreden stakeholder (laag prio)</option>
+              <option value="Onrustige stakeholder">Onrustige stakeholder (medium prio)</option>
+              <option value="Kans op churn">Kans op churn (hoge prio)</option>
+            </select>
           </div>
 
           {/* Calculated Priority Preview */}

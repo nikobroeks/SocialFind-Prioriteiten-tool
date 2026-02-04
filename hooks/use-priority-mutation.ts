@@ -29,18 +29,20 @@ export function usePriorityMutation({ jobId, companyId, onSuccess }: UsePriority
 
       // Optimistically update to the new value
       const calculatedPriority = calculatePriority(
-        newPriorityData.strategy_score,
-        newPriorityData.hiring_chance,
-        newPriorityData.client_pain
+        newPriorityData.client_pain_level,
+        newPriorityData.time_criticality,
+        newPriorityData.strategic_value,
+        newPriorityData.account_health
       );
 
       const optimisticPriority: VacancyPriority = {
         id: `temp-${jobId}-${companyId}`, // Temporary ID for optimistic update
         recruitee_job_id: jobId,
         recruitee_company_id: companyId,
-        strategy_score: newPriorityData.strategy_score,
-        hiring_chance: newPriorityData.hiring_chance,
-        client_pain: newPriorityData.client_pain,
+        client_pain_level: newPriorityData.client_pain_level,
+        time_criticality: newPriorityData.time_criticality,
+        strategic_value: newPriorityData.strategic_value,
+        account_health: newPriorityData.account_health,
         calculated_priority: calculatedPriority,
         manual_override: newPriorityData.manual_override,
         notes: newPriorityData.notes,

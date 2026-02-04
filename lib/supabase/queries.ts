@@ -56,11 +56,12 @@ export async function upsertPriority(
   companyId: number,
   formData: PriorityFormData
 ): Promise<VacancyPriority> {
-  // Bereken de calculated priority
+  // Bereken de calculated priority op basis van de 4 pijlers
   const calculatedPriority = calculatePriority(
-    formData.strategy_score,
-    formData.hiring_chance,
-    formData.client_pain
+    formData.client_pain_level,
+    formData.time_criticality,
+    formData.strategic_value,
+    formData.account_health
   );
 
   const { data: userData } = await supabase.auth.getUser();
@@ -69,9 +70,11 @@ export async function upsertPriority(
   const priorityData = {
     recruitee_job_id: jobId,
     recruitee_company_id: companyId,
-    strategy_score: formData.strategy_score,
-    hiring_chance: formData.hiring_chance,
-    client_pain: formData.client_pain,
+    // Nieuwe 4 pijlers
+    client_pain_level: formData.client_pain_level,
+    time_criticality: formData.time_criticality,
+    strategic_value: formData.strategic_value,
+    account_health: formData.account_health,
     calculated_priority: calculatedPriority,
     manual_override: formData.manual_override,
     notes: formData.notes,

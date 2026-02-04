@@ -91,25 +91,27 @@ export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewP
                       
                       <div className="space-y-2 text-xs text-gray-600 mb-3">
                         <div className="flex items-center justify-between">
+                          <span className="text-gray-500">Klant pijn:</span>
+                          <span className="font-medium">
+                            {vacancy.priority?.client_pain_level || '-'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-gray-500">Tijdkritiek:</span>
+                          <span className="font-medium">
+                            {vacancy.priority?.time_criticality || '-'}
+                          </span>
+                        </div>
+                        <div className="flex items-center justify-between">
                           <span className="text-gray-500">Strategie:</span>
                           <span className="font-medium">
-                            {vacancy.priority?.strategy_score || '-'}
+                            {vacancy.priority?.strategic_value || '-'}
                           </span>
                         </div>
                         <div className="flex items-center justify-between">
-                          <span className="text-gray-500">Hiring:</span>
+                          <span className="text-gray-500">Account:</span>
                           <span className="font-medium">
-                            {vacancy.priority?.hiring_chance || '-'}
-                          </span>
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <span className="text-gray-500">Pijn:</span>
-                          <span className="font-medium">
-                            {vacancy.priority?.client_pain ? (
-                              <span className="text-red-600">Ja</span>
-                            ) : (
-                              'Nee'
-                            )}
+                            {vacancy.priority?.account_health || '-'}
                           </span>
                         </div>
                       </div>

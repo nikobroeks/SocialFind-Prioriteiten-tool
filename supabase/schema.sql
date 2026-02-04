@@ -31,7 +31,13 @@ CREATE TABLE public.vacancy_priorities (
   recruitee_job_id INTEGER NOT NULL,
   recruitee_company_id INTEGER NOT NULL,
   
-  -- De 3 pijlers
+  -- De 4 pijlers
+  client_pain_level TEXT CHECK (client_pain_level IN ('Nee', 'Beginnend', 'Ja')),
+  time_criticality TEXT CHECK (time_criticality IN ('Net begonnen', 'Lopend', 'Tegen het einde van samenwerking')),
+  strategic_value TEXT CHECK (strategic_value IN ('C-klant', 'B-klant', 'A-klant')),
+  account_health TEXT CHECK (account_health IN ('Tevreden stakeholder', 'Onrustige stakeholder', 'Kans op churn')),
+  
+  -- Oude velden (voor backward compatibility - kunnen later verwijderd worden)
   strategy_score TEXT CHECK (strategy_score IN ('Key Account', 'Longterm', 'Ad-hoc')),
   hiring_chance TEXT CHECK (hiring_chance IN ('High', 'Medium', 'Low')),
   client_pain BOOLEAN DEFAULT FALSE,

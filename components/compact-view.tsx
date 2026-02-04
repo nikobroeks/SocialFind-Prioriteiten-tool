@@ -131,22 +131,22 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                         </h4>
                         <PriorityBadge priority={vacancy.displayPriority} />
                       </div>
-                      <div className="flex items-center gap-4 text-xs text-gray-500 mt-1">
+                      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
+                        <span>
+                          <span className="font-medium">Klant pijn:</span>{' '}
+                          {vacancy.priority?.client_pain_level || '-'}
+                        </span>
+                        <span>
+                          <span className="font-medium">Tijdkritiek:</span>{' '}
+                          {vacancy.priority?.time_criticality || '-'}
+                        </span>
                         <span>
                           <span className="font-medium">Strategie:</span>{' '}
-                          {vacancy.priority?.strategy_score || '-'}
+                          {vacancy.priority?.strategic_value || '-'}
                         </span>
                         <span>
-                          <span className="font-medium">Hiring:</span>{' '}
-                          {vacancy.priority?.hiring_chance || '-'}
-                        </span>
-                        <span>
-                          <span className="font-medium">Pijn:</span>{' '}
-                          {vacancy.priority?.client_pain ? (
-                            <span className="text-red-600 font-medium">Ja</span>
-                          ) : (
-                            'Nee'
-                          )}
+                          <span className="font-medium">Account:</span>{' '}
+                          {vacancy.priority?.account_health || '-'}
                         </span>
                       </div>
                     </div>
