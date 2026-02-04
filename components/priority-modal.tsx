@@ -8,6 +8,7 @@ import { PriorityBadge } from './priority-badge';
 import { calculatePriority, getDisplayPriority } from '@/lib/utils';
 import { usePriorityMutation } from '@/hooks/use-priority-mutation';
 import { ClientPainLevel, TimeCriticality, StrategicValue, AccountHealth } from '@/types/database';
+import { TalentPoolGoldmine } from './talent-pool-goldmine';
 
 interface PriorityModalProps {
   vacancy: VacancyWithPriority;
@@ -254,6 +255,19 @@ export function PriorityModal({ vacancy, isOpen, onClose }: PriorityModalProps) 
               aria-required="false"
             />
           </div>
+
+          {/* Talent Pool Goldmine - Only show for Red priority jobs */}
+          {displayPriority === 'Red' && (
+            <div className="pt-4 border-t">
+              <TalentPoolGoldmine
+                jobId={vacancy.job.id}
+                jobTitle={vacancy.job.title}
+                jobTags={(vacancy.job as any).tags}
+                companyId={vacancy.company.id}
+                enabled={true}
+              />
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex flex-col-reverse sm:flex-row justify-end gap-3 pt-4 border-t">

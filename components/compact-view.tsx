@@ -2,9 +2,10 @@
 
 import { VacancyWithPriority, CompanyGroup } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
-import { Edit2, Building2, Users, Search, Inbox } from 'lucide-react';
+import { Edit2, Building2, Users, Search, Inbox, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { PriorityModal } from './priority-modal';
+import { TalentPoolModal } from './talent-pool-modal';
 
 interface CompactViewProps {
   companyGroups: CompanyGroup[];
@@ -16,10 +17,17 @@ interface CompactViewProps {
 export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQuery = '' }: CompactViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithPriority | null>(null);
+  const [isTalentPoolModalOpen, setIsTalentPoolModalOpen] = useState(false);
+  const [selectedTalentPoolVacancy, setSelectedTalentPoolVacancy] = useState<VacancyWithPriority | null>(null);
 
   const handleEdit = (vacancy: VacancyWithPriority) => {
     setSelectedVacancy(vacancy);
     setIsModalOpen(true);
+  };
+
+  const handleTalentPool = (vacancy: VacancyWithPriority) => {
+    setSelectedTalentPoolVacancy(vacancy);
+    setIsTalentPoolModalOpen(true);
   };
 
   if (companyGroups.length === 0) {
@@ -130,6 +138,16 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                           {vacancy.job.title}
                         </h4>
                         <PriorityBadge priority={vacancy.displayPriority} />
+                        {vacancy.displayPriority === 'Red' && (
+                          <button
+                            onClick={() => handleTalentPool(vacancy)}
+                            className="inline-flex items-center gap-1 px-2 py-0.5 text-xs font-medium text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 rounded transition-colors border border-yellow-200"
+                            title="Zoek kandidaten in talent pool"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            Zoek
+                          </button>
+                        )}
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
                         <span>
@@ -175,6 +193,16 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
           onClose={() => {
             setIsModalOpen(false);
             setSelectedVacancy(null);
+          }}
+        />
+      )}
+      {isTalentPoolModalOpen && selectedTalentPoolVacancy && (
+        <TalentPoolModal
+          vacancy={selectedTalentPoolVacancy}
+          isOpen={isTalentPoolModalOpen}
+          onClose={() => {
+            setIsTalentPoolModalOpen(false);
+            setSelectedTalentPoolVacancy(null);
           }}
         />
       )}

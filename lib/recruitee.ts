@@ -1216,3 +1216,758 @@ export async function fetchRecruiteeHires(month?: number, year?: number): Promis
   }
 }
 
+/**
+ * Silver Medalist: Candidate who reached late stages but was not hired
+ * Late stages include: Hiring Manager Interview, Offer, Final Interview, etc.
+ */
+export interface SilverMedalistCandidate extends RecruiteeCandidate {
+  furthest_stage?: {
+    id: number;
+    name: string;
+    category?: string;
+  };
+  furthest_stage_date?: string;
+  previous_offer_id?: number;
+  previous_offer_title?: string;
+  previous_offer_company?: string;
+}
+
+/**
+ * Late stage names that indicate a candidate was close to being hired
+ */
+const LATE_STAGE_KEYWORDS = [
+  'hiring manager',
+  'hiring manager interview',
+  'final interview',
+  'final round',
+  'offer',
+  'aanbod',
+  'eindgesprek',
+  'laatste ronde',
+  'beslissing',
+  'decision',
+];
+
+/**
+ * Checks if a stage name indicates a late-stage interview
+ */
+function isLateStage(stageName: string | undefined): boolean {
+  if (!stageName) return false;
+  const normalized = stageName.toLowerCase().trim();
+  return LATE_STAGE_KEYWORDS.some(keyword => normalized.includes(keyword));
+}
+
+/**
+ * Fetches stages from Recruitee API
+ * Tries multiple endpoints to get stage information
+ */
+async function fetchStagesMap(): Promise<Map<number, { id: number; name: string; category?: string }>> {
+  const stageMap = new Map<number, { id: number; name: string; category?: string }>();
+  
+  if (!RECRUITEE_API_KEY || !RECRUITEE_COMPANY_ID) {
+    return stageMap;
+  }
+
+  try {
+    // Method 1: Try direct stages endpoint
+    try {
+      const stagesUrl = `${RECRUITEE_API_BASE_URL}/c/${RECRUITEE_COMPANY_ID}/stages`;
+      const stagesResponse = await fetch(stagesUrl, {
+        headers: {
+          'Authorization': `Bearer ${RECRUITEE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      
+      if (stagesResponse.ok) {
+        const stagesData = await stagesResponse.json();
+        const stages = Array.isArray(stagesData) ? stagesData : (stagesData.stages || stagesData.data || []);
+        stages.forEach((stage: any) => {
+          if (stage.id && stage.name) {
+            stageMap.set(stage.id, {
+              id: stage.id,
+              name: stage.name,
+              category: stage.category,
+            });
+          }
+        });
+        console.log(`[SILVER-MEDALISTS] Found ${stageMap.size} stages via stages endpoint`);
+      }
+    } catch (error) {
+      console.warn('[SILVER-MEDALISTS] Stages endpoint not available, trying alternatives...');
+    }
+    
+    // Method 2: Try to fetch stages from sample candidates (they have references)
+    if (stageMap.size === 0) {
+      try {
+        const sampleCandidates = await fetchRecruiteeCandidates({ perPage: 20 });
+        for (const candidate of sampleCandidates.slice(0, 5)) {
+          try {
+            // Fetch full candidate data with references
+            const candidateUrl = `${RECRUITEE_API_BASE_URL}/c/${RECRUITEE_COMPANY_ID}/candidates/${candidate.id}`;
+            const candidateResponse = await fetch(candidateUrl, {
+              headers: {
+                'Authorization': `Bearer ${RECRUITEE_API_KEY}`,
+                'Content-Type': 'application/json',
+              },
+            });
+            
+            if (candidateResponse.ok) {
+              const candidateData = await candidateResponse.json();
+              const references = candidateData.references || candidateData._references || [];
+              
+              references.forEach((ref: any) => {
+                if (ref.type === 'Stage' && ref.id && ref.name) {
+                  stageMap.set(ref.id, {
+                    id: ref.id,
+                    name: ref.name,
+                    category: ref.category,
+                  });
+                }
+              });
+            }
+          } catch (error) {
+            // Continue with next candidate
+          }
+        }
+        console.log(`[SILVER-MEDALISTS] Found ${stageMap.size} stages via candidate references`);
+      } catch (error) {
+        console.warn('[SILVER-MEDALISTS] Could not fetch stages from candidates:', error);
+      }
+    }
+    
+    // Method 3: Try to fetch stages from offers (offers may contain stages)
+    if (stageMap.size === 0) {
+      try {
+        const offers = await fetchRecruiteeJobs({ status: 'published', perPage: 10 });
+        
+        for (const offer of offers.slice(0, 5)) {
+          try {
+            const offerDetails = await fetchRecruiteeJob(offer.id);
+            if (offerDetails) {
+              const offerAny = offerDetails as any;
+              // Check for stages in offer
+              if (offerAny.stages && Array.isArray(offerAny.stages)) {
+                offerAny.stages.forEach((stage: any) => {
+                  if (stage.id && stage.name) {
+                    stageMap.set(stage.id, {
+                      id: stage.id,
+                      name: stage.name,
+                      category: stage.category,
+                    });
+                  }
+                });
+              }
+              // Check for pipeline stages
+              if (offerAny.pipeline && offerAny.pipeline.stages) {
+                offerAny.pipeline.stages.forEach((stage: any) => {
+                  if (stage.id && stage.name) {
+                    stageMap.set(stage.id, {
+                      id: stage.id,
+                      name: stage.name,
+                      category: stage.category,
+                    });
+                  }
+                });
+              }
+            }
+          } catch (error) {
+            // Continue with next offer
+          }
+        }
+        console.log(`[SILVER-MEDALISTS] Found ${stageMap.size} stages via offers`);
+      } catch (error) {
+        console.warn('[SILVER-MEDALISTS] Could not fetch stages from offers:', error);
+      }
+    }
+    
+    console.log(`[SILVER-MEDALISTS] Built stage map with ${stageMap.size} stages`);
+  } catch (error) {
+    console.warn('[SILVER-MEDALISTS] Error building stage map:', error);
+  }
+  
+  return stageMap;
+}
+
+/**
+ * Fetches Silver Medalist candidates: disqualified candidates who reached late stages
+ * These are candidates who were close to being hired but didn't make it
+ */
+export async function fetchSilverMedalistCandidates(): Promise<SilverMedalistCandidate[]> {
+  if (!RECRUITEE_API_KEY || !RECRUITEE_COMPANY_ID) {
+    throw new Error('Recruitee API credentials not configured');
+  }
+
+  try {
+    console.log('[SILVER-MEDALISTS] Starting to fetch candidates...');
+    
+    // First, build a map of stage_id -> stage name
+    const stageMap = await fetchStagesMap();
+    
+    // OPTIMIZATION: Use fetchRecruiteeCandidates to get all candidates at once
+    // This is much faster than fetching per offer
+    console.log('[SILVER-MEDALISTS] Fetching all candidates via candidates endpoint...');
+    let allCandidates: RecruiteeCandidate[] = [];
+    
+    try {
+      // Fetch ALL candidates by paginating through all pages
+      console.log('[SILVER-MEDALISTS] Fetching all candidates with pagination...');
+      allCandidates = [];
+      let page = 1;
+      let hasMore = true;
+      const perPage = 100; // Smaller page size for reliability
+      
+      while (hasMore) {
+        const pageCandidates = await fetchRecruiteeCandidates({ perPage, page });
+        console.log(`[SILVER-MEDALISTS] Page ${page}: fetched ${pageCandidates.length} candidates`);
+        
+        if (pageCandidates.length === 0) {
+          hasMore = false;
+        } else {
+          allCandidates.push(...pageCandidates);
+          // If we got fewer than perPage, we're done
+          if (pageCandidates.length < perPage) {
+            hasMore = false;
+          } else {
+            page++;
+          }
+        }
+        
+        // Safety limit: don't fetch more than 50 pages (5000 candidates)
+        if (page > 50) {
+          console.warn(`[SILVER-MEDALISTS] Reached page limit (50 pages), stopping pagination`);
+          hasMore = false;
+        }
+      }
+      
+      console.log(`[SILVER-MEDALISTS] Total fetched: ${allCandidates.length} candidates across ${page} pages`);
+      
+      // If we got candidates, we need to enrich them with offer info and stage names
+      if (allCandidates.length > 0) {
+        const offers = await fetchRecruiteeJobs({ status: 'published', perPage: 500 });
+        const offerMap = new Map<number, RecruiteeJob>();
+        offers.forEach(offer => offerMap.set(offer.id, offer));
+        
+        // Enrich candidates with offer info and stage names
+        allCandidates = allCandidates.map(candidate => {
+          const candidateAny = candidate as any;
+          
+          // Try to find offer_id from multiple sources
+          let offerId = candidate.offer_id || candidateAny.offerId || candidateAny.current_offer_id;
+          const placements = candidateAny.placements || [];
+          
+          // If no offer_id, try to get it from placements (check all placements, not just first)
+          if (!offerId && placements.length > 0) {
+            for (const placement of placements) {
+              offerId = placement.offer_id || placement.offerId || placement.offer?.id || null;
+              if (offerId) break; // Found one, stop searching
+            }
+          }
+          
+          // Also check current_placement
+          if (!offerId && candidateAny.current_placement) {
+            offerId = candidateAny.current_placement.offer_id || 
+                     candidateAny.current_placement.offerId || 
+                     candidateAny.current_placement.offer?.id || null;
+          }
+          
+          const offer = offerId ? offerMap.get(offerId) : null;
+          
+          // Log if we couldn't find offer info
+          if (!offer && allCandidates.indexOf(candidate) < 5) {
+            console.log(`[SILVER-MEDALISTS] Candidate ${candidate.name} (ID: ${candidate.id}) - No offer found. offer_id: ${offerId}, placements: ${placements.length}`);
+          }
+          
+          // Enrich placements with stage names
+          const enrichedPlacements = placements.map((placement: any) => {
+            const stageId = placement.stage_id || placement.stageId || placement.stage?.id;
+            if (stageId && stageMap.has(stageId)) {
+              const stageInfo = stageMap.get(stageId)!;
+              return {
+                ...placement,
+                stage: {
+                  id: stageInfo.id,
+                  name: stageInfo.name,
+                  category: stageInfo.category,
+                },
+              };
+            }
+            return placement;
+          });
+          
+          // Enrich candidate.stage if we have stage_id
+          let enrichedStage = candidate.stage;
+          if (!enrichedStage) {
+            const stageId = candidateAny.stage_id || candidateAny.current_stage_id;
+            if (stageId && stageMap.has(stageId)) {
+              const stageInfo = stageMap.get(stageId)!;
+              enrichedStage = {
+                id: stageInfo.id,
+                name: stageInfo.name,
+                category: stageInfo.category,
+              };
+            }
+          }
+          
+          return {
+            ...candidate,
+            stage: enrichedStage,
+            placements: enrichedPlacements,
+            previous_offer_id: offerId,
+            previous_offer_title: offer?.title || 'Onbekende vacature',
+            previous_offer_company: offer?.company?.name || 'Onbekend Bedrijf',
+          };
+        });
+      }
+    } catch (error) {
+      console.warn('[SILVER-MEDALISTS] Failed to fetch via candidates endpoint, trying per-offer method:', error);
+      
+      // Fallback: fetch per offer (slower but more reliable)
+      // Fetch ALL offers with pagination
+      console.log('[SILVER-MEDALISTS] Fetching all offers with pagination...');
+      const allOffers: RecruiteeJob[] = [];
+      let offerPage = 1;
+      let hasMoreOffers = true;
+      
+      while (hasMoreOffers) {
+        const pageOffers = await fetchRecruiteeJobs({ status: 'published', page: offerPage, perPage: 100 });
+        console.log(`[SILVER-MEDALISTS] Offer page ${offerPage}: ${pageOffers.length} offers`);
+        
+        if (pageOffers.length === 0) {
+          hasMoreOffers = false;
+        } else {
+          allOffers.push(...pageOffers);
+          if (pageOffers.length < 100) {
+            hasMoreOffers = false;
+          } else {
+            offerPage++;
+          }
+        }
+        
+        // Safety limit
+        if (offerPage > 20) {
+          console.warn(`[SILVER-MEDALISTS] Reached offer page limit (20 pages)`);
+          hasMoreOffers = false;
+        }
+      }
+      
+      const offers = allOffers;
+      console.log(`[SILVER-MEDALISTS] Total offers: ${offers.length}, fetching candidates per offer...`);
+      
+      const BATCH_SIZE = 10;
+      for (let i = 0; i < offers.length; i += BATCH_SIZE) {
+        const batch = offers.slice(i, i + BATCH_SIZE);
+        const batchPromises = batch.map(async (offer) => {
+          try {
+            // Try both methods
+            let candidates = await fetchCandidatesForOffer(offer.id);
+            if (candidates.length === 0) {
+              candidates = await fetchRecruiteeCandidates({ offerId: offer.id, perPage: 100 });
+            }
+            
+            // Enrich with stage names
+            return candidates.map(candidate => {
+              const candidateAny = candidate as any;
+              const placements = candidateAny.placements || [];
+              const enrichedPlacements = placements.map((placement: any) => {
+                const stageId = placement.stage_id || placement.stageId || placement.stage?.id;
+                if (stageId && stageMap.has(stageId)) {
+                  const stageInfo = stageMap.get(stageId)!;
+                  return {
+                    ...placement,
+                    stage: {
+                      id: stageInfo.id,
+                      name: stageInfo.name,
+                      category: stageInfo.category,
+                    },
+                  };
+                }
+                return placement;
+              });
+              
+              let enrichedStage = candidate.stage;
+              if (!enrichedStage) {
+                const stageId = candidateAny.stage_id || candidateAny.current_stage_id;
+                if (stageId && stageMap.has(stageId)) {
+                  const stageInfo = stageMap.get(stageId)!;
+                  enrichedStage = {
+                    id: stageInfo.id,
+                    name: stageInfo.name,
+                    category: stageInfo.category,
+                  };
+                }
+              }
+              
+              return {
+                ...candidate,
+                stage: enrichedStage,
+                placements: enrichedPlacements,
+                previous_offer_id: offer.id,
+                previous_offer_title: offer.title,
+                previous_offer_company: offer.company?.name || 'Onbekend Bedrijf',
+              };
+            });
+          } catch (error) {
+            console.warn(`[SILVER-MEDALISTS] Error fetching candidates for offer ${offer.id}:`, error);
+            return [];
+          }
+        });
+        
+        const batchResults = await Promise.all(batchPromises);
+        batchResults.forEach(candidates => {
+          allCandidates.push(...candidates);
+        });
+      }
+    }
+    
+    console.log(`[SILVER-MEDALISTS] Fetched ${allCandidates.length} total candidates`);
+    
+    // Filter for Silver Medalists: NOT hired but reached late stages
+    // Changed logic: We don't require "disqualified" status - just "not hired" + "late stage"
+    const silverMedalists: SilverMedalistCandidate[] = [];
+    const candidateMap = new Map<number, SilverMedalistCandidate>();
+    
+    let candidatesWithLateStage = 0;
+    let candidatesHired = 0;
+    let candidatesNotHired = 0;
+    
+    for (const candidate of allCandidates) {
+      const candidateAny = candidate as any;
+      const placements = candidateAny.placements || [];
+      
+      // Skip if hired
+      if (candidateAny.is_hired || candidate.hired_at) {
+        candidatesHired++;
+        continue;
+      }
+      
+      candidatesNotHired++;
+      
+      // Check placements for late stages
+      let furthestStage: { id: number; name: string; category?: string } | null = null;
+      let furthestStageDate: string | null = null;
+      
+      for (const placement of placements) {
+        const placementStage = placement.stage || placement;
+        const placementStageName = placementStage?.name?.toLowerCase() || '';
+        
+        // Check if this is a late stage
+        if (isLateStage(placementStageName)) {
+          candidatesWithLateStage++;
+          // This is a late stage - check if it's further than current furthest
+          if (!furthestStage || 
+              (placement.updated_at && (!furthestStageDate || placement.updated_at > furthestStageDate))) {
+            furthestStage = {
+              id: placementStage?.id || placement.stage_id || 0,
+              name: placementStage?.name || '',
+              category: placementStage?.category,
+            };
+            furthestStageDate = placement.updated_at || placement.created_at || null;
+          }
+        }
+      }
+      
+      // Also check current stage
+      if (candidate.stage && isLateStage(candidate.stage.name)) {
+        if (!furthestStage) {
+          candidatesWithLateStage++;
+        }
+        if (!furthestStage || 
+            (candidate.updated_at && (!furthestStageDate || candidate.updated_at > furthestStageDate))) {
+          furthestStage = {
+            id: candidate.stage.id,
+            name: candidate.stage.name,
+            category: candidate.stage.category,
+          };
+          furthestStageDate = candidate.updated_at || candidate.created_at || null;
+        }
+      }
+      
+      // Silver Medalist: NOT hired + reached late stage
+      // We don't require explicit "disqualified" status anymore
+      if (furthestStage) {
+        const existing = candidateMap.get(candidate.id);
+        
+        // Keep the candidate with the most recent late stage
+        if (!existing || (furthestStageDate && (!existing.furthest_stage_date || furthestStageDate > existing.furthest_stage_date))) {
+          const silverMedalist: SilverMedalistCandidate = {
+            ...candidate,
+            furthest_stage: furthestStage,
+            furthest_stage_date: furthestStageDate || undefined,
+            previous_offer_id: candidate.offer_id || candidateAny.previous_offer_id,
+            previous_offer_title: candidateAny.offer_title || candidateAny.previous_offer_title,
+            previous_offer_company: candidateAny.offer_company || candidateAny.previous_offer_company,
+          };
+          
+          candidateMap.set(candidate.id, silverMedalist);
+        }
+      }
+    }
+    
+    console.log(`[SILVER-MEDALISTS] Stats:`, {
+      totalCandidates: allCandidates.length,
+      hired: candidatesHired,
+      notHired: candidatesNotHired,
+      withLateStage: candidatesWithLateStage,
+      silverMedalists: candidateMap.size,
+    });
+    
+    return Array.from(candidateMap.values());
+  } catch (error) {
+    console.error('[SILVER-MEDALISTS] Error fetching Silver Medalist candidates:', error);
+    throw error;
+  }
+}
+
+/**
+ * Synoniemen mapping voor functietitels
+ * Dit helpt om vergelijkbare functies te matchen
+ */
+const JOB_TITLE_SYNONYMS: Record<string, string[]> = {
+  // Developer/Engineer synoniemen
+  'developer': ['engineer', 'programmer', 'coder', 'ontwikkelaar'],
+  'engineer': ['developer', 'programmer', 'coder', 'ingenieur'],
+  'programmer': ['developer', 'engineer', 'coder'],
+  'coder': ['developer', 'engineer', 'programmer'],
+  'ontwikkelaar': ['developer', 'engineer', 'programmer'],
+  'ingenieur': ['engineer', 'developer'],
+  
+  // Frontend synoniemen
+  'frontend': ['front-end', 'frontend', 'front end', 'client-side', 'ui'],
+  'front-end': ['frontend', 'front end', 'client-side', 'ui'],
+  'frontend': ['front-end', 'front end', 'client-side', 'ui'],
+  'ui': ['frontend', 'front-end', 'user interface', 'interface'],
+  'ux': ['user experience', 'usability', 'designer'],
+  
+  // Backend synoniemen
+  'backend': ['back-end', 'backend', 'back end', 'server-side', 'api'],
+  'back-end': ['backend', 'back end', 'server-side', 'api'],
+  'backend': ['back-end', 'back end', 'server-side', 'api'],
+  'api': ['backend', 'back-end', 'rest', 'graphql'],
+  
+  // Fullstack synoniemen
+  'fullstack': ['full-stack', 'full stack', 'fullstack'],
+  'full-stack': ['fullstack', 'full stack'],
+  'fullstack': ['full-stack', 'full stack'],
+  
+  // Senior/Junior/medior niveaus
+  'senior': ['sr', 'lead', 'principal', 'experienced'],
+  'junior': ['jr', 'entry', 'starter', 'beginner'],
+  'medior': ['mid', 'middle', 'intermediate'],
+  'lead': ['senior', 'principal', 'tech lead'],
+  'principal': ['senior', 'lead', 'architect'],
+  
+  // Manager synoniemen
+  'manager': ['lead', 'head', 'director', 'supervisor'],
+  'lead': ['manager', 'head', 'supervisor'],
+  'head': ['manager', 'director', 'lead'],
+  
+  // Designer synoniemen
+  'designer': ['design', 'ui designer', 'ux designer'],
+  'design': ['designer', 'ui', 'ux'],
+  
+  // Analyst synoniemen
+  'analyst': ['analist', 'specialist', 'consultant'],
+  'analist': ['analyst', 'specialist'],
+  'specialist': ['analyst', 'expert', 'consultant'],
+  
+  // Consultant synoniemen
+  'consultant': ['consultant', 'advisor', 'specialist'],
+  'advisor': ['consultant', 'specialist'],
+  
+  // Architect synoniemen
+  'architect': ['architect', 'solution architect', 'system architect'],
+  'solution': ['architect', 'designer'],
+  
+  // Tech stack synoniemen
+  'javascript': ['js', 'typescript', 'node'],
+  'typescript': ['javascript', 'ts', 'node'],
+  'react': ['reactjs', 'react.js'],
+  'angular': ['angularjs', 'angular.js'],
+  'vue': ['vuejs', 'vue.js'],
+  'node': ['nodejs', 'node.js'],
+  'python': ['py'],
+  'java': ['java'],
+  'c#': ['csharp', 'c sharp'],
+  'c++': ['cpp', 'c plus plus'],
+  '.net': ['dotnet', 'dot net'],
+};
+
+/**
+ * Expand keywords with synoniemen
+ */
+function expandKeywordsWithSynonyms(keywords: string[]): string[] {
+  const expanded = new Set<string>();
+  
+  for (const keyword of keywords) {
+    // Add original keyword
+    expanded.add(keyword);
+    
+    // Add synoniemen if they exist
+    const synonyms = JOB_TITLE_SYNONYMS[keyword];
+    if (synonyms) {
+      synonyms.forEach(syn => expanded.add(syn));
+    }
+    
+    // Also check reverse: if any synonym maps to this keyword
+    for (const [key, syns] of Object.entries(JOB_TITLE_SYNONYMS)) {
+      if (syns.includes(keyword)) {
+        expanded.add(key);
+        syns.forEach(syn => expanded.add(syn));
+      }
+    }
+  }
+  
+  return Array.from(expanded);
+}
+
+/**
+ * Normalize text for better matching (remove special chars, normalize spaces)
+ */
+function normalizeText(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, ' ') // Replace special chars with space
+    .replace(/\s+/g, ' ') // Normalize spaces
+    .trim();
+}
+
+/**
+ * Extract meaningful keywords from job title
+ * Includes both individual words and common job title patterns
+ */
+function extractKeywords(title: string): string[] {
+  const normalized = normalizeText(title);
+  
+  // Split into words
+  const words = normalized
+    .split(/\s+/)
+    .filter(word => word.length > 2) // Filter out very short words
+    .filter(word => !['voor', 'van', 'met', 'een', 'het', 'de', 'en', 'of', 'the', 'a', 'an', 'and', 'or'].includes(word)); // Filter stop words
+  
+  // Also extract common patterns (e.g., "front-end developer" -> ["front-end", "developer", "frontend developer"])
+  const patterns: string[] = [];
+  
+  // Check for hyphenated terms and add both versions
+  words.forEach(word => {
+    if (word.includes('-')) {
+      patterns.push(word.replace(/-/g, ' ')); // "front-end" -> "front end"
+      patterns.push(word.replace(/-/g, '')); // "front-end" -> "frontend"
+    }
+  });
+  
+  // Add common job title combinations
+  if (words.length >= 2) {
+    // Add bigrams (two-word combinations)
+    for (let i = 0; i < words.length - 1; i++) {
+      patterns.push(`${words[i]} ${words[i + 1]}`);
+    }
+  }
+  
+  return [...words, ...patterns];
+}
+
+/**
+ * Calculate match score between job title and candidate title
+ * Returns a score from 0-1 indicating how well they match
+ */
+function calculateMatchScore(
+  jobKeywords: string[],
+  candidateTitle: string,
+  candidateTags: string[]
+): number {
+  const candidateTitleNormalized = normalizeText(candidateTitle);
+  const candidateTagsNormalized = candidateTags.map(tag => normalizeText(tag));
+  
+  let score = 0;
+  let matches = 0;
+  
+  for (const keyword of jobKeywords) {
+    const keywordLower = keyword.toLowerCase();
+    
+    // Check exact match in title (higher weight)
+    if (candidateTitleNormalized.includes(keywordLower)) {
+      score += 2;
+      matches++;
+    }
+    // Check partial match (word boundary)
+    else if (new RegExp(`\\b${keywordLower}\\w*`, 'i').test(candidateTitleNormalized)) {
+      score += 1.5;
+      matches++;
+    }
+    // Check in tags
+    else if (candidateTagsNormalized.some(tag => tag.includes(keywordLower))) {
+      score += 1;
+      matches++;
+    }
+  }
+  
+  // Normalize score (0-1 range)
+  if (jobKeywords.length === 0) return 0;
+  const normalizedScore = Math.min(score / (jobKeywords.length * 2), 1);
+  
+  // Bonus for multiple matches
+  const matchRatio = matches / jobKeywords.length;
+  return (normalizedScore * 0.7) + (matchRatio * 0.3);
+}
+
+/**
+ * Matches Silver Medalist candidates to a job based on title keywords and tags
+ * Now includes synoniemen matching and fuzzy matching for similar titles
+ */
+export function matchCandidatesToJob(
+  candidates: SilverMedalistCandidate[],
+  jobTitle: string,
+  jobTags?: string[]
+): SilverMedalistCandidate[] {
+  if (!jobTitle) return [];
+  
+  // Extract keywords from job title
+  const titleKeywords = extractKeywords(jobTitle);
+  
+  // Expand with synoniemen
+  const expandedKeywords = expandKeywordsWithSynonyms(titleKeywords);
+  
+  // Combine with tags
+  const allKeywords = [...expandedKeywords];
+  if (jobTags) {
+    jobTags.forEach(tag => {
+      const tagKeywords = extractKeywords(tag);
+      allKeywords.push(...tagKeywords);
+    });
+  }
+  
+  // Remove duplicates
+  const uniqueKeywords = Array.from(new Set(allKeywords));
+  
+  // Match candidates with scoring
+  const matched: Array<{ candidate: SilverMedalistCandidate; score: number }> = [];
+  
+  for (const candidate of candidates) {
+    const candidateTitle = candidate.previous_offer_title || '';
+    const candidateTags = (candidate as any).tags || [];
+    
+    // Calculate match score
+    const score = calculateMatchScore(uniqueKeywords, candidateTitle, candidateTags);
+    
+    // Only include if score is above threshold (0.2 = at least some match)
+    if (score > 0.2) {
+      matched.push({ candidate, score });
+    }
+  }
+  
+  // Sort by score (highest first), then by date
+  matched.sort((a, b) => {
+    const scoreDiff = b.score - a.score;
+    if (Math.abs(scoreDiff) > 0.1) {
+      return scoreDiff > 0 ? 1 : -1;
+    }
+    // If scores are similar, sort by date
+    const dateA = a.candidate.furthest_stage_date ? new Date(a.candidate.furthest_stage_date).getTime() : 0;
+    const dateB = b.candidate.furthest_stage_date ? new Date(b.candidate.furthest_stage_date).getTime() : 0;
+    return dateB - dateA;
+  });
+  
+  return matched.map(m => m.candidate);
+}
+

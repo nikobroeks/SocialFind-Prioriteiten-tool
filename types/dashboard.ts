@@ -3,7 +3,7 @@
  * Deze types combineren Recruitee data met lokale prioriteits data
  */
 
-import { RecruiteeJob, RecruiteeCompany } from './recruitee';
+import { RecruiteeJob, RecruiteeCompany, SilverMedalistCandidate } from './recruitee';
 import { VacancyPriority } from './database';
 
 // Re-export PriorityColor voor gebruik in andere bestanden
@@ -19,6 +19,9 @@ export interface VacancyWithPriority {
   
   // Berekende display priority (gebruikt manual_override als die bestaat, anders calculated_priority)
   displayPriority: PriorityColor;
+  
+  // Optional: Suggested candidates from talent pool goldmining
+  suggestedCandidates?: SilverMedalistCandidate[];
 }
 
 export interface CompanyGroup {

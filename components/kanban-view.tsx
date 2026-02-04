@@ -2,9 +2,10 @@
 
 import { VacancyWithPriority } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
-import { Edit2, Search, Inbox } from 'lucide-react';
+import { Edit2, Search, Inbox, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { PriorityModal } from './priority-modal';
+import { TalentPoolModal } from './talent-pool-modal';
 import { PriorityColor } from '@/types/dashboard';
 
 interface KanbanViewProps {
@@ -16,6 +17,8 @@ interface KanbanViewProps {
 export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithPriority | null>(null);
+  const [isTalentPoolModalOpen, setIsTalentPoolModalOpen] = useState(false);
+  const [selectedTalentPoolVacancy, setSelectedTalentPoolVacancy] = useState<VacancyWithPriority | null>(null);
 
   const columns: { priority: PriorityColor; label: string; color: string }[] = [
     { priority: 'Red', label: 'Hoog Prioriteit', color: 'border-red-200 bg-red-50/30' },
@@ -26,6 +29,11 @@ export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewP
   const handleEdit = (vacancy: VacancyWithPriority) => {
     setSelectedVacancy(vacancy);
     setIsModalOpen(true);
+  };
+
+  const handleTalentPool = (vacancy: VacancyWithPriority) => {
+    setSelectedTalentPoolVacancy(vacancy);
+    setIsTalentPoolModalOpen(true);
   };
 
   // Show empty state if no vacancies at all
@@ -116,15 +124,26 @@ export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewP
                         </div>
                       </div>
 
-                      {isAdmin && (
-                        <button
-                          onClick={() => handleEdit(vacancy)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-md transition-colors border border-orange-200"
-                        >
-                          <Edit2 className="h-3 w-3" />
-                          Bewerken
-                        </button>
-                      )}
+                      <div className="flex flex-col gap-2">
+                        {vacancy.displayPriority === 'Red' && (
+                          <button
+                            onClick={() => handleTalentPool(vacancy)}
+                            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 rounded-md transition-colors border border-yellow-200"
+                          >
+                            <Sparkles className="h-3 w-3" />
+                            Zoek Kandidaten
+                          </button>
+                        )}
+                        {isAdmin && (
+                          <button
+                            onClick={() => handleEdit(vacancy)}
+                            className="w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded-md transition-colors border border-orange-200"
+                          >
+                            <Edit2 className="h-3 w-3" />
+                            Bewerken
+                          </button>
+                        )}
+                      </div>
                     </div>
                   ))
                 )}
@@ -141,6 +160,16 @@ export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewP
           onClose={() => {
             setIsModalOpen(false);
             setSelectedVacancy(null);
+          }}
+        />
+      )}
+      {isTalentPoolModalOpen && selectedTalentPoolVacancy && (
+        <TalentPoolModal
+          vacancy={selectedTalentPoolVacancy}
+          isOpen={isTalentPoolModalOpen}
+          onClose={() => {
+            setIsTalentPoolModalOpen(false);
+            setSelectedTalentPoolVacancy(null);
           }}
         />
       )}

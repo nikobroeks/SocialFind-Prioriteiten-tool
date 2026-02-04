@@ -60,3 +60,21 @@ export interface RecruiteeCandidatesResponse {
     per_page: number;
   };
 }
+
+/**
+ * Silver Medalist: Candidate who reached late stages but was not hired
+ */
+export interface SilverMedalistCandidate extends RecruiteeCandidate {
+  furthest_stage?: {
+    id: number;
+    name: string;
+    category?: string;
+  };
+  furthest_stage_date?: string;
+  previous_offer_id?: number;
+  previous_offer_title?: string;
+  previous_offer_company?: string;
+  // AI matching results
+  matchScore?: number; // 0-100 percentage
+  matchReasoning?: string; // Explanation of the match
+}

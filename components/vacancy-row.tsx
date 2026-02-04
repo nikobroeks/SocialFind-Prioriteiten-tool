@@ -2,9 +2,11 @@
 
 import { VacancyWithPriority } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
-import { Edit2 } from 'lucide-react';
+import { Edit2, Sparkles } from 'lucide-react';
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 import { PriorityModal } from './priority-modal';
+import { TalentPoolModal } from './talent-pool-modal';
 
 interface VacancyRowProps {
   vacancy: VacancyWithPriority;
@@ -13,6 +15,8 @@ interface VacancyRowProps {
 
 export function VacancyRow({ vacancy, isAdmin }: VacancyRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isTalentPoolModalOpen, setIsTalentPoolModalOpen] = useState(false);
+  const isRedPriority = vacancy.displayPriority === 'Red';
 
   return (
     <>
@@ -50,16 +54,28 @@ export function VacancyRow({ vacancy, isAdmin }: VacancyRowProps) {
                 </span>
               </div>
             </div>
-            {isAdmin && (
-              <button
-                onClick={() => setIsModalOpen(true)}
-                className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 text-xs font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded transition-colors border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
-                aria-label={`Bewerk prioriteit voor ${vacancy.job.title}`}
-              >
-                <Edit2 className="h-3.5 w-3.5" aria-hidden="true" />
-                Bewerken
-              </button>
-            )}
+            <div className="flex flex-col gap-2">
+              {isRedPriority && (
+                <button
+                  onClick={() => setIsTalentPoolModalOpen(true)}
+                  className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 text-xs font-medium text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 rounded transition-colors border border-yellow-200 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                  aria-label={`Zoek kandidaten voor ${vacancy.job.title}`}
+                >
+                  <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                  Zoek Kandidaten
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  onClick={() => setIsModalOpen(true)}
+                  className="w-full inline-flex items-center justify-center gap-1 px-3 py-2 text-xs font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded transition-colors border border-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
+                  aria-label={`Bewerk prioriteit voor ${vacancy.job.title}`}
+                >
+                  <Edit2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  Bewerken
+                </button>
+              )}
+            </div>
           </div>
         </td>
       </tr>
@@ -100,7 +116,20 @@ export function VacancyRow({ vacancy, isAdmin }: VacancyRowProps) {
           </span>
         </td>
         <td className="p-3">
-          <PriorityBadge priority={vacancy.displayPriority} />
+          <div className="flex items-center gap-2">
+            <PriorityBadge priority={vacancy.displayPriority} />
+            {isRedPriority && (
+              <button
+                onClick={() => setIsTalentPoolModalOpen(true)}
+                className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-yellow-600 hover:text-yellow-700 hover:bg-yellow-50 rounded transition-colors whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
+                aria-label={`Zoek kandidaten voor ${vacancy.job.title}`}
+                title="Zoek kandidaten in talent pool"
+              >
+                <Sparkles className="h-3.5 w-3.5" aria-hidden="true" />
+                Zoek
+              </button>
+            )}
+          </div>
         </td>
         {isAdmin && (
           <td className="p-3">
@@ -115,12 +144,22 @@ export function VacancyRow({ vacancy, isAdmin }: VacancyRowProps) {
           </td>
         )}
       </tr>
-      {isModalOpen && (
+      {/* Render modals outside table structure using portal */}
+      {typeof window !== 'undefined' && isModalOpen && createPortal(
         <PriorityModal
           vacancy={vacancy}
           isOpen={isModalOpen}
           onClose={() => setIsModalOpen(false)}
-        />
+        />,
+        document.body
+      )}
+      {typeof window !== 'undefined' && isTalentPoolModalOpen && createPortal(
+        <TalentPoolModal
+          vacancy={vacancy}
+          isOpen={isTalentPoolModalOpen}
+          onClose={() => setIsTalentPoolModalOpen(false)}
+        />,
+        document.body
       )}
     </>
   );
