@@ -15,13 +15,16 @@ export default async function AdminUsersPage() {
     }
 
     // Check if user is admin
-    const { data: userRole } = await supabase
+    const { data: userRole, error: roleError } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', user.id)
-      .single();
+      .maybeSingle();
 
-    if (!userRole || userRole.role !== 'admin') {
+    type UserRoleData = { role: 'admin' | 'viewer' } | null;
+    const roleData = userRole as UserRoleData;
+
+    if (roleError || !roleData || roleData.role !== 'admin') {
       return (
         <main className="container mx-auto py-8 px-4">
           <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
