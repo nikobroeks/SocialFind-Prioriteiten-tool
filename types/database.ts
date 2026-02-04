@@ -60,7 +60,7 @@ export interface Database {
       user_roles: {
         Row: UserRoleRow;
         Insert: Omit<UserRoleRow, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<UserRoleRow, 'id' | 'created_at'>>;
+        Update: Partial<Omit<UserRoleRow, 'id' | 'created_at' | 'updated_at'>>;
       };
     };
   };
