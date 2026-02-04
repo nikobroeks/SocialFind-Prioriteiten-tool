@@ -133,15 +133,13 @@ export async function bulkUpdateJobVisibility(
 
   // Fetch existing visibility records to get company names
   const jobIds = updates.map(u => u.jobId);
-  const { data: existingRecords } = await supabase
-    .from('job_visibility')
+  const { data: existingRecords } = await (supabase.from('job_visibility') as any)
     .select('recruitee_job_id, recruitee_company_id, company_name')
     .in('recruitee_job_id', jobIds);
 
   const companyNameMap = new Map<number, string>();
   if (existingRecords) {
-    existingRecords.forEach(record => {
-      const key = `${record.recruitee_job_id}-${record.recruitee_company_id}`;
+    (existingRecords as any[]).forEach((record: any) => {
       companyNameMap.set(record.recruitee_job_id, record.company_name);
     });
   }
