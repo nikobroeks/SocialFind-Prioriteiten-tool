@@ -1,8 +1,10 @@
 'use client';
 
-import { Building2, Briefcase, TrendingUp } from 'lucide-react';
+import { Building2, Briefcase, TrendingUp, RefreshCw } from 'lucide-react';
 import { LogoutButton } from './logout-button';
 import { DataRefreshButton } from './data-refresh-button';
+import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 
 interface DashboardHeaderProps {
@@ -11,6 +13,44 @@ interface DashboardHeaderProps {
 }
 
 export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHeaderProps) {
+  const queryClient = useQueryClient();
+  const [isRestoring, setIsRestoring] = useState(false);
+
+  const handleRestoreAll = async () => {
+    if (!confirm('Weet je zeker dat je alle verborgen vacatures weer zichtbaar wilt maken?')) {
+      return;
+    }
+
+    setIsRestoring(true);
+    try {
+      const response = await fetch('/api/job-visibility/restore-all', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to restore hidden jobs');
+      }
+
+      const result = await response.json();
+      if (result.restored.length > 0) {
+        alert(`Success! ${result.restored.length} verborgen vacature${result.restored.length !== 1 ? 's' : ''} ${result.restored.length !== 1 ? 'zijn' : 'is'} weer zichtbaar gemaakt.`);
+      } else {
+        alert('Er zijn geen verborgen vacatures gevonden.');
+      }
+      
+      // Refresh the dashboard
+      await queryClient.invalidateQueries({ queryKey: ['job-visibility'] });
+      await queryClient.invalidateQueries({ queryKey: ['recruiteeJobs'] });
+    } catch (error: any) {
+      alert(`Fout: ${error.message}`);
+      console.error('Error restoring hidden jobs:', error);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
   return (
     <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -59,6 +99,15 @@ export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHea
               <TrendingUp className="h-4 w-4" />
               Hires
             </a>
+            <button
+              onClick={handleRestoreAll}
+              disabled={isRestoring}
+              className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-orange-700 hover:text-orange-900 hover:bg-orange-50 rounded-lg transition-colors border border-orange-200 disabled:opacity-50"
+              title="Maak alle verborgen vacatures weer zichtbaar"
+            >
+              <RefreshCw className={`h-4 w-4 ${isRestoring ? 'animate-spin' : ''}`} />
+              <span className="hidden sm:inline">Alle zichtbaar maken</span>
+            </button>
             <DataRefreshButton />
             <LogoutButton />
           </div>
