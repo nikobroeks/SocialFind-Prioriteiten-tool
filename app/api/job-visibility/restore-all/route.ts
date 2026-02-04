@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { setJobVisibility } from '@/lib/supabase/job-visibility';
+import { setJobVisibility, JobVisibility } from '@/lib/supabase/job-visibility';
 
 /**
  * API route om alle verborgen vacatures weer zichtbaar te maken
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     }
 
     // Haal alle verborgen jobs op uit de job_visibility tabel
-    const { data: hiddenJobs, error: visibilityError } = await supabase
+    const { data: hiddenJobsData, error: visibilityError } = await supabase
       .from('job_visibility')
       .select('*')
       .eq('is_visible', false);
@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       throw visibilityError;
     }
 
-    if (!hiddenJobs || hiddenJobs.length === 0) {
+    if (!hiddenJobsData || hiddenJobsData.length === 0) {
       return NextResponse.json({
         success: true,
         message: 'Geen verborgen vacatures gevonden',
@@ -32,6 +32,17 @@ export async function POST(request: Request) {
         totalFound: 0,
       });
     }
+
+    // Type assertion met expliciete mapping
+    const hiddenJobs: JobVisibility[] = hiddenJobsData.map((job: any) => ({
+      id: job.id || '',
+      recruitee_job_id: Number(job.recruitee_job_id),
+      recruitee_company_id: Number(job.recruitee_company_id),
+      company_name: String(job.company_name || ''),
+      is_visible: Boolean(job.is_visible),
+      created_at: job.created_at || new Date().toISOString(),
+      updated_at: job.updated_at || new Date().toISOString(),
+    }));
 
     console.log(`[RESTORE ALL] Found ${hiddenJobs.length} hidden jobs`);
 
