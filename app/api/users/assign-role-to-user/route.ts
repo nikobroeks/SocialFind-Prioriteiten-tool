@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
-import { Database } from '@/types/database';
 
 export async function POST(request: Request) {
   try {
@@ -56,13 +55,8 @@ export async function POST(request: Request) {
 
     if (existingRole) {
       // Update existing role
-      const updateData: Database['public']['Tables']['user_roles']['Update'] = {
-        role: role as 'admin' | 'viewer',
-        email: targetEmail.toLowerCase(),
-      };
-      const { error: updateError } = await supabase
-        .from('user_roles')
-        .update(updateData)
+      const { error: updateError } = await (supabase.from('user_roles') as any)
+        .update({ role, email: targetEmail.toLowerCase() })
         .eq('user_id', targetUserId);
 
       if (updateError) {
@@ -75,8 +69,7 @@ export async function POST(request: Request) {
       });
     } else {
       // Insert new role
-      const { error: insertError } = await supabase
-        .from('user_roles')
+      const { error: insertError } = await (supabase.from('user_roles') as any)
         .insert({
           user_id: targetUserId,
           email: targetEmail.toLowerCase(),
