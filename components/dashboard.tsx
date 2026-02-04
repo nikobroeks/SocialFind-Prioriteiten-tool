@@ -344,7 +344,7 @@ export default function Dashboard() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50">
-        <DashboardHeader totalCompanies={0} totalVacancies={0} />
+        <DashboardHeader totalCompanies={0} totalVacancies={0} userRole={userRole} />
         <div className="flex items-center justify-center min-h-[calc(100vh-56px)]">
           <div className="text-center">
             <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-orange-500 mb-4"></div>
@@ -395,7 +395,7 @@ export default function Dashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <DashboardHeader totalCompanies={totalCompanies} totalVacancies={totalVacancies} />
+      <DashboardHeader totalCompanies={totalCompanies} totalVacancies={totalVacancies} userRole={userRole} />
       
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Dashboard Analytics */}

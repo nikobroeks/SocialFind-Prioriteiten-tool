@@ -1,6 +1,6 @@
 'use client';
 
-import { Building2, Briefcase, TrendingUp, RefreshCw } from 'lucide-react';
+import { Building2, Briefcase, TrendingUp, RefreshCw, Users } from 'lucide-react';
 import { LogoutButton } from './logout-button';
 import { DataRefreshButton } from './data-refresh-button';
 import { useState } from 'react';
@@ -10,9 +10,10 @@ import Image from 'next/image';
 interface DashboardHeaderProps {
   totalCompanies: number;
   totalVacancies: number;
+  userRole?: 'admin' | 'viewer' | null;
 }
 
-export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHeaderProps) {
+export function DashboardHeader({ totalCompanies, totalVacancies, userRole }: DashboardHeaderProps) {
   const queryClient = useQueryClient();
   const [isRestoring, setIsRestoring] = useState(false);
 
@@ -97,6 +98,16 @@ export function DashboardHeader({ totalCompanies, totalVacancies }: DashboardHea
 
           {/* Actions */}
           <nav className="flex items-center gap-2 sm:gap-3" aria-label="Hoofdnavigatie">
+            {userRole === 'admin' && (
+              <a
+                href="/admin/users"
+                className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-purple-700 hover:text-purple-900 hover:bg-purple-50 rounded-lg transition-colors border border-purple-200 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+                aria-label="Beheer gebruikers"
+              >
+                <Users className="h-4 w-4" aria-hidden="true" />
+                <span className="hidden sm:inline">Gebruikers</span>
+              </a>
+            )}
             <a
               href="/hires"
               className="inline-flex items-center gap-1 sm:gap-2 px-2 sm:px-4 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200 focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2"
