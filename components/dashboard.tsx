@@ -14,15 +14,12 @@ import { KanbanView } from './kanban-view';
 import { CompactView } from './compact-view';
 import { useState, useEffect } from 'react';
 import { getUserRole } from '@/lib/supabase/queries';
-import { Building2, TrendingUp, AlertCircle, Users, Settings } from 'lucide-react';
-import { CompanyJobsModal } from './company-jobs-modal';
-import { getAllJobVisibility } from '@/lib/supabase/job-visibility';
-import { RecruiteeJob } from '@/types/recruitee';
+import { Building2, TrendingUp, AlertCircle, Users, EyeOff } from 'lucide-react';
+import { CompanyVisibilityToggle } from './company-visibility-toggle';
 
 export default function Dashboard() {
   const [userRole, setUserRole] = useState<'admin' | 'viewer' | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
-  const [selectedCompany, setSelectedCompany] = useState<{ name: string; id: number; jobs: RecruiteeJob[] } | null>(null);
 
   // Fetch user role
   const { data: roleData } = useQuery({
@@ -53,19 +50,6 @@ export default function Dashboard() {
     retry: 1,
   });
 
-  // Fetch job visibility settings
-  const { data: jobVisibility = [] } = useQuery({
-    queryKey: ['job-visibility'],
-    queryFn: getAllJobVisibility,
-    staleTime: 15 * 60 * 1000,
-    gcTime: 60 * 60 * 1000,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    refetchInterval: false,
-    retry: 1,
-  });
-
   // Fetch company hires (last 90 days) - heavily cached
   const { data: companyHiresData } = useQuery({
     queryKey: ['company-hires-90d'],
@@ -82,6 +66,21 @@ export default function Dashboard() {
     refetchInterval: false,
     retry: 1,
   });
+
+  // Fetch job visibility settings
+  const { data: visibilityData } = useQuery({
+    queryKey: ['job-visibility'],
+    queryFn: async () => {
+      const response = await fetch('/api/job-visibility');
+      if (!response.ok) throw new Error('Failed to fetch job visibility');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  const visibility = visibilityData?.visibility || [];
 
   const companyHires = companyHiresData?.companyHires || {};
   
@@ -130,16 +129,50 @@ export default function Dashboard() {
   // Debug logging will be done after companyGroupsWithPriority is created
 
   // Filter jobs based on visibility settings
-  // Default: all jobs are visible unless explicitly hidden
+  // Jobs are visible by default unless explicitly hidden
   const visibleJobs = jobs.filter((job) => {
-    const visibilitySetting = jobVisibility.find(
-      v => v.recruitee_job_id === job.id && v.recruitee_company_id === job.company_id
+    const jobVisibility = visibility.find(
+      (v: any) => v.recruitee_job_id === job.id && v.recruitee_company_id === job.company_id
     );
-    // If no setting exists, job is visible by default
-    return visibilitySetting?.is_visible !== false;
+    // If no visibility setting exists, job is visible by default
+    // If setting exists, use the is_visible value
+    return jobVisibility ? jobVisibility.is_visible : true;
   });
 
-  // Combine visible jobs with priorities
+  // Group ALL jobs by company (including hidden ones) for visibility toggle
+  // This ensures we can restore hidden jobs
+  const allJobsByCompany = jobs.reduce((acc, job) => {
+    // Extract company data
+    let company = job.company;
+    if (!company && job.company_id) {
+      const companyName = (job as any).company_name || 
+                         (job as any).company?.name || 
+                         `Company ${job.company_id}`;
+      company = {
+        id: job.company_id,
+        name: companyName,
+      };
+    }
+    if (!company) {
+      company = {
+        id: job.company_id || 0,
+        name: 'Unknown Company',
+      };
+    }
+
+    const companyKey = (job as any).company_string_id || company.id.toString();
+    
+    if (!acc[companyKey]) {
+      acc[companyKey] = {
+        company,
+        allJobIds: [],
+      };
+    }
+    acc[companyKey].allJobIds.push(job.id);
+    return acc;
+  }, {} as Record<string, { company: any; allJobIds: number[] }>);
+
+  // Combine jobs with priorities (only visible jobs for display)
   const vacanciesWithPriority: VacancyWithPriority[] = visibleJobs.map((job) => {
     const priority = priorities.find(
       (p) =>
@@ -183,23 +216,50 @@ export default function Dashboard() {
     };
   });
 
-  // Group by company (gebruik company_string_id als die bestaat, anders company.id)
-  const companyGroups: CompanyGroup[] = Object.values(
-    vacanciesWithPriority.reduce((acc, vacancy) => {
-      // Gebruik company_string_id voor groepering (op basis van naam uit titel)
-      const companyKey = (vacancy.job as any).company_string_id || 
-                        vacancy.company.id.toString();
-      
-      if (!acc[companyKey]) {
-        acc[companyKey] = {
-          company: vacancy.company,
-          vacancies: [],
-        };
-      }
-      acc[companyKey].vacancies.push(vacancy);
-      return acc;
-    }, {} as Record<string, CompanyGroup>)
-  );
+  // Group ALL companies first (including those with no visible jobs)
+  // This ensures companies are always visible even if all their jobs are hidden
+  const allCompaniesMap = jobs.reduce((acc, job) => {
+    // Extract company data
+    let company = job.company;
+    if (!company && job.company_id) {
+      const companyName = (job as any).company_name || 
+                         (job as any).company?.name || 
+                         `Company ${job.company_id}`;
+      company = {
+        id: job.company_id,
+        name: companyName,
+      };
+    }
+    if (!company) {
+      company = {
+        id: job.company_id || 0,
+        name: 'Unknown Company',
+      };
+    }
+
+    const companyKey = (job as any).company_string_id || company.id.toString();
+    
+    if (!acc[companyKey]) {
+      acc[companyKey] = {
+        company,
+        vacancies: [],
+      };
+    }
+    return acc;
+  }, {} as Record<string, CompanyGroup>);
+
+  // Now add visible vacancies to their companies
+  vacanciesWithPriority.forEach((vacancy) => {
+    const companyKey = (vacancy.job as any).company_string_id || 
+                      vacancy.company.id.toString();
+    
+    if (allCompaniesMap[companyKey]) {
+      allCompaniesMap[companyKey].vacancies.push(vacancy);
+    }
+  });
+
+  // Convert to array - ALL companies are included, even if they have no visible vacancies
+  const companyGroups: CompanyGroup[] = Object.values(allCompaniesMap);
 
   // Bereken company priority: hoogste priority van alle vacatures binnen dat bedrijf
   const companyGroupsWithPriority = companyGroups.map(group => {
@@ -399,7 +459,10 @@ export default function Dashboard() {
                       <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
                       <div className="flex items-center gap-4 mt-0.5">
                         <p className="text-sm text-gray-500">
-                          {group.vacancies.length} vacature{group.vacancies.length !== 1 ? 's' : ''}
+                          {group.vacancies.length > 0 
+                            ? `${group.vacancies.length} vacature${group.vacancies.length !== 1 ? 's' : ''}`
+                            : 'Geen zichtbare vacatures'
+                          }
                         </p>
                         {(() => {
                           const hiresCount = getCompanyHires(group.company.name);
@@ -414,43 +477,123 @@ export default function Dashboard() {
                       </div>
                     </div>
                   </div>
-                  <PriorityBadge priority={group.companyPriority || 'Green'} />
+                  <div className="flex items-center gap-3">
+                    {userRole === 'admin' && (() => {
+                      // Determine the company key for this group
+                      // First try to get it from visible vacancies, then from all jobs
+                      let companyKey: string | null = null;
+                      
+                      if (group.vacancies.length > 0) {
+                        companyKey = (group.vacancies[0]?.job as any)?.company_string_id || null;
+                      }
+                      
+                      // If no company key found, try to find it from all jobs matching this company
+                      if (!companyKey) {
+                        const matchingJob = jobs.find((job) => {
+                          const jobCompanyName = job.company?.name || (job as any).company_name || '';
+                          const jobCompanyId = job.company_id;
+                          return jobCompanyName === group.company.name || 
+                                 jobCompanyId === group.company.id;
+                        });
+                        if (matchingJob) {
+                          companyKey = (matchingJob as any).company_string_id || matchingJob.company_id.toString();
+                        }
+                      }
+                      
+                      // Fallback to company ID if still no key found
+                      if (!companyKey) {
+                        companyKey = group.company.id.toString();
+                      }
+                      
+                      // Get ALL job objects for this SPECIFIC company only (including hidden ones)
+                      // IMPORTANT: Use the original 'jobs' array which contains ALL jobs, not just visible ones
+                      // The 'visibleJobs' array is filtered and should NOT be used here
+                      const allCompanyJobs = jobs.filter((job) => {
+                        const jobCompanyKey = (job as any).company_string_id || job.company_id.toString();
+                        const jobCompanyName = job.company?.name || (job as any).company_name || '';
+                        const jobCompanyId = job.company_id;
+                        
+                        // Strict matching: must match company key OR (company name AND company ID)
+                        const matchesByKey = jobCompanyKey === companyKey;
+                        const matchesByNameAndId = jobCompanyName === group.company.name && 
+                                                 jobCompanyId === group.company.id;
+                        
+                        return matchesByKey || matchesByNameAndId;
+                      });
+                      
+                      // Debug log (can be removed later)
+                      if (allCompanyJobs.length === 0) {
+                        console.warn(`[VISIBILITY] No jobs found for company: ${group.company.name} (ID: ${group.company.id}, Key: ${companyKey})`);
+                      } else {
+                        // Log to verify we're getting all jobs including hidden ones
+                        const visibleCount = allCompanyJobs.filter(job => {
+                          const jobVisibility = visibility.find(
+                            (v: any) => v.recruitee_job_id === job.id && v.recruitee_company_id === group.company.id
+                          );
+                          return jobVisibility ? jobVisibility.is_visible : true;
+                        }).length;
+                        console.log(`[VISIBILITY] Company ${group.company.name}: ${allCompanyJobs.length} total jobs (${visibleCount} visible, ${allCompanyJobs.length - visibleCount} hidden)`);
+                      }
+                      
+                      return (
+                        <CompanyVisibilityToggle
+                          companyName={group.company.name}
+                          companyId={group.company.id}
+                          jobs={allCompanyJobs}
+                          isAdmin={userRole === 'admin'}
+                        />
+                      );
+                    })()}
+                    <PriorityBadge priority={group.companyPriority || 'Green'} />
+                  </div>
                 </div>
               </div>
 
               {/* Table */}
               <div>
-                <table className="w-full border-collapse">
-                      <colgroup>
-                        <col className="w-[35%]" />
-                        <col className="w-[12%]" />
-                        <col className="w-[10%]" />
-                        <col className="w-[8%]" />
-                        <col className="w-[12%]" />
-                        {userRole === 'admin' && <col className="w-[13%]" />}
-                      </colgroup>
-                      <thead>
-                        <tr className="bg-gray-50 border-b border-gray-200">
-                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Vacature</th>
-                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Strategie</th>
-                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Hiring</th>
-                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Pijn</th>
-                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Prioriteit</th>
-                          {userRole === 'admin' && (
-                            <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Acties</th>
-                          )}
-                        </tr>
-                      </thead>
-                <tbody>
-                  {group.vacancies.map((vacancy) => (
-                    <VacancyRow
-                      key={vacancy.job.id}
-                      vacancy={vacancy}
-                      isAdmin={userRole === 'admin'}
-                    />
-                  ))}
-                </tbody>
-                </table>
+                {group.vacancies.length > 0 ? (
+                  <table className="w-full border-collapse">
+                    <colgroup>
+                      <col className="w-[35%]" />
+                      <col className="w-[12%]" />
+                      <col className="w-[10%]" />
+                      <col className="w-[8%]" />
+                      <col className="w-[12%]" />
+                      {userRole === 'admin' && <col className="w-[13%]" />}
+                    </colgroup>
+                    <thead>
+                      <tr className="bg-gray-50 border-b border-gray-200">
+                        <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Vacature</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Strategie</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Hiring</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Pijn</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Prioriteit</th>
+                        {userRole === 'admin' && (
+                          <th className="text-left p-3 text-xs font-semibold text-gray-600 uppercase tracking-wider">Acties</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {group.vacancies.map((vacancy) => (
+                        <VacancyRow
+                          key={vacancy.job.id}
+                          vacancy={vacancy}
+                          isAdmin={userRole === 'admin'}
+                        />
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div className="px-6 py-8 text-center">
+                    <EyeOff className="h-8 w-8 text-gray-300 mx-auto mb-2" />
+                    <p className="text-sm text-gray-500">
+                      Alle vacatures voor dit bedrijf zijn verborgen
+                    </p>
+                    <p className="text-xs text-gray-400 mt-1">
+                      Gebruik de zichtbaarheidsinstellingen om vacatures weer zichtbaar te maken
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
           );
@@ -458,17 +601,6 @@ export default function Dashboard() {
           )}
         </div>
       </main>
-
-      {/* Company Jobs Modal */}
-      {selectedCompany && (
-        <CompanyJobsModal
-          isOpen={!!selectedCompany}
-          onClose={() => setSelectedCompany(null)}
-          companyName={selectedCompany.name}
-          companyId={selectedCompany.id}
-          jobs={selectedCompany.jobs}
-        />
-      )}
     </div>
   );
 }

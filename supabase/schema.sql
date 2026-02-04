@@ -205,12 +205,12 @@ CREATE TRIGGER update_recruitee_cache_updated_at
 -- ============================================
 -- Job Visibility Table
 -- ============================================
--- Deze tabel slaat op welke jobs zichtbaar zijn in het dashboard
--- Standaard zijn alle jobs zichtbaar (is_visible = true)
+-- Deze tabel slaat op welke jobs zichtbaar zijn per bedrijf
 CREATE TABLE public.job_visibility (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   recruitee_job_id INTEGER NOT NULL,
   recruitee_company_id INTEGER NOT NULL,
+  company_name TEXT NOT NULL,
   is_visible BOOLEAN DEFAULT TRUE,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -223,6 +223,7 @@ CREATE TABLE public.job_visibility (
 -- Indexen voor snelle queries
 CREATE INDEX idx_job_visibility_job_id ON public.job_visibility(recruitee_job_id);
 CREATE INDEX idx_job_visibility_company_id ON public.job_visibility(recruitee_company_id);
+CREATE INDEX idx_job_visibility_company_name ON public.job_visibility(company_name);
 CREATE INDEX idx_job_visibility_is_visible ON public.job_visibility(is_visible);
 
 -- RLS Policies voor job visibility
