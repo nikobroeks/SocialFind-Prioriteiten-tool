@@ -34,15 +34,15 @@ export async function POST(request: Request) {
         .single();
 
       if (existingCache) {
-        await (supabase
+        await supabase
           .from('recruitee_cache')
           .update({
             jobs: JSON.stringify(jobs),
             cached_at: new Date().toISOString(),
-          }) as any)
+          } as any)
           .eq('user_id', user.id);
       } else {
-        await (supabase
+        await supabase
           .from('recruitee_cache')
           .insert({
             user_id: user.id,
@@ -50,7 +50,7 @@ export async function POST(request: Request) {
             hires: JSON.stringify([]),
             applications: JSON.stringify([]),
             cached_at: new Date().toISOString(),
-          }) as any);
+          } as any);
       }
 
       return NextResponse.json({
@@ -74,12 +74,12 @@ export async function POST(request: Request) {
         .single();
 
       if (existingCache) {
-        await (supabase
+        await supabase
           .from('recruitee_cache')
           .update({
             applications: JSON.stringify(applications),
             cached_at: new Date().toISOString(),
-          }) as any)
+          } as any)
           .eq('user_id', user.id);
       }
 
@@ -104,13 +104,13 @@ export async function POST(request: Request) {
         .single();
 
       if (existingCache) {
-        await (supabase
+        await supabase
           .from('recruitee_cache')
           .update({
             hires: JSON.stringify(hires),
             stats: JSON.stringify(stats),
             cached_at: new Date().toISOString(),
-          }) as any)
+          } as any)
           .eq('user_id', user.id);
       }
 
