@@ -27,8 +27,7 @@ export async function POST(request: Request) {
 
       if (!existingRole) {
         // Insert admin role
-        const { error } = await supabase
-          .from('user_roles')
+        const { error } = await (supabase.from('user_roles') as any)
           .insert({
             user_id: user.id,
             email: user.email.toLowerCase(),

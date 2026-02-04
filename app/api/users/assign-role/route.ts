@@ -23,8 +23,7 @@ export async function POST(request: Request) {
     }
 
     // Insert user role
-    const { error } = await supabase
-      .from('user_roles')
+    const { error } = await (supabase.from('user_roles') as any)
       .insert({
         user_id: user.id,
         email: user.email!,

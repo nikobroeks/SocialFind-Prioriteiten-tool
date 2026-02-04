@@ -34,23 +34,21 @@ export async function POST(request: Request) {
         .single();
 
       if (existingCache) {
-        await supabase
-          .from('recruitee_cache')
+        await (supabase.from('recruitee_cache') as any)
           .update({
             jobs: JSON.stringify(jobs),
             cached_at: new Date().toISOString(),
-          } as any)
+          })
           .eq('user_id', user.id);
       } else {
-        await supabase
-          .from('recruitee_cache')
+        await (supabase.from('recruitee_cache') as any)
           .insert({
             user_id: user.id,
             jobs: JSON.stringify(jobs),
             hires: JSON.stringify([]),
             applications: JSON.stringify([]),
             cached_at: new Date().toISOString(),
-          } as any);
+          });
       }
 
       return NextResponse.json({
@@ -74,12 +72,11 @@ export async function POST(request: Request) {
         .single();
 
       if (existingCache) {
-        await supabase
-          .from('recruitee_cache')
+        await (supabase.from('recruitee_cache') as any)
           .update({
             applications: JSON.stringify(applications),
             cached_at: new Date().toISOString(),
-          } as any)
+          })
           .eq('user_id', user.id);
       }
 
@@ -104,13 +101,12 @@ export async function POST(request: Request) {
         .single();
 
       if (existingCache) {
-        await supabase
-          .from('recruitee_cache')
+        await (supabase.from('recruitee_cache') as any)
           .update({
             hires: JSON.stringify(hires),
             stats: JSON.stringify(stats),
             cached_at: new Date().toISOString(),
-          } as any)
+          })
           .eq('user_id', user.id);
       }
 
