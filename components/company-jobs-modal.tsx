@@ -70,7 +70,7 @@ export function CompanyJobsModal({
         isVisible,
       }));
 
-      await bulkUpdateJobVisibility(updates);
+      await bulkUpdateJobVisibility(updates, companyName);
       
       // Invalidate queries to refresh dashboard
       await queryClient.invalidateQueries({ queryKey: ['job-visibility'] });

@@ -3,7 +3,8 @@
  */
 
 import { supabase } from './client';
-import { VacancyPriority, PriorityFormData } from '@/types/database';
+import { VacancyPriority } from '@/types/database';
+import { PriorityFormData } from '@/types/dashboard';
 import { calculatePriority } from '@/lib/utils';
 
 /**
@@ -77,8 +78,7 @@ export async function upsertPriority(
     updated_by: userId || null,
   };
 
-  const { data, error } = await supabase
-    .from('vacancy_priorities')
+  const { data, error } = await (supabase.from('vacancy_priorities') as any)
     .upsert(priorityData, {
       onConflict: 'recruitee_job_id,recruitee_company_id',
     })
@@ -120,8 +120,7 @@ export async function getUserRole(): Promise<'admin' | 'viewer' | null> {
     return null;
   }
 
-  const { data, error } = await supabase
-    .from('user_roles')
+  const { data, error } = await (supabase.from('user_roles') as any)
     .select('role')
     .eq('user_id', userData.user.id)
     .single();
@@ -130,6 +129,6 @@ export async function getUserRole(): Promise<'admin' | 'viewer' | null> {
     return null;
   }
 
-  return data.role as 'admin' | 'viewer';
+  return (data as any).role as 'admin' | 'viewer';
 }
 

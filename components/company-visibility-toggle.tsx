@@ -58,7 +58,7 @@ export function CompanyVisibilityToggle({
   const companyJobs = useMemo(() => {
     const filtered = jobs.filter((job) => {
       const jobCompanyId = job.company_id;
-      const jobCompanyName = (job.company?.name || (job as any).company_name || '').trim().toLowerCase();
+      const jobCompanyName = ((job.company as any)?.name || (job as any).company_name || '').trim().toLowerCase();
       const targetCompanyName = companyName.trim().toLowerCase();
       
       // Match by both ID and name for strict filtering

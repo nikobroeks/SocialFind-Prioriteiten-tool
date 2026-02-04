@@ -118,3 +118,49 @@ export async function setCompanyJobsVisibility(
     throw error;
   }
 }
+
+/**
+ * Bulk update job visibility for multiple jobs
+ * Note: This function requires companyName to be passed, but the component doesn't provide it
+ * We'll fetch existing records to get company names, or use a fallback
+ */
+export async function bulkUpdateJobVisibility(
+  updates: Array<{ jobId: number; companyId: number; isVisible: boolean }>,
+  companyName?: string
+): Promise<void> {
+  const supabase = await createClient();
+  const { data: { user } = {} } = await supabase.auth.getUser();
+
+  // Fetch existing visibility records to get company names
+  const jobIds = updates.map(u => u.jobId);
+  const { data: existingRecords } = await supabase
+    .from('job_visibility')
+    .select('recruitee_job_id, recruitee_company_id, company_name')
+    .in('recruitee_job_id', jobIds);
+
+  const companyNameMap = new Map<number, string>();
+  if (existingRecords) {
+    existingRecords.forEach(record => {
+      const key = `${record.recruitee_job_id}-${record.recruitee_company_id}`;
+      companyNameMap.set(record.recruitee_job_id, record.company_name);
+    });
+  }
+
+  const visibilityData = updates.map(update => ({
+    recruitee_job_id: update.jobId,
+    recruitee_company_id: update.companyId,
+    company_name: companyName || companyNameMap.get(update.jobId) || `Company ${update.companyId}`,
+    is_visible: update.isVisible,
+    updated_by: user?.id,
+  }));
+
+  const { error } = await (supabase.from('job_visibility') as any)
+    .upsert(visibilityData as any, {
+      onConflict: 'recruitee_job_id,recruitee_company_id',
+    });
+
+  if (error) {
+    console.error('Error bulk updating job visibility:', error);
+    throw error;
+  }
+}

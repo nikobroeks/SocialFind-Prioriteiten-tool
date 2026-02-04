@@ -64,8 +64,7 @@ export default function RegisterPage() {
             await new Promise(resolve => setTimeout(resolve, 300));
             
             // Assign admin role direct via Supabase client
-            const { error: insertError } = await supabase
-              .from('user_roles')
+            const { error: insertError } = await (supabase.from('user_roles') as any)
               .insert({
                 user_id: data.user.id,
                 email: email.toLowerCase(),

@@ -23,7 +23,7 @@ export interface VacancyPriority {
   updated_by: string | null;
 }
 
-export interface UserRole {
+export interface UserRoleRow {
   id: string;
   user_id: string;
   email: string;
@@ -41,9 +41,9 @@ export interface Database {
         Update: Partial<Omit<VacancyPriority, 'id' | 'created_at'>>;
       };
       user_roles: {
-        Row: UserRole;
-        Insert: Omit<UserRole, 'id' | 'created_at' | 'updated_at'>;
-        Update: Partial<Omit<UserRole, 'id' | 'created_at'>>;
+        Row: UserRoleRow;
+        Insert: Omit<UserRoleRow, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<UserRoleRow, 'id' | 'created_at'>>;
       };
     };
   };

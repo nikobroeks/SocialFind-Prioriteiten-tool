@@ -35,6 +35,7 @@ export function usePriorityMutation({ jobId, companyId, onSuccess }: UsePriority
       );
 
       const optimisticPriority: VacancyPriority = {
+        id: `temp-${jobId}-${companyId}`, // Temporary ID for optimistic update
         recruitee_job_id: jobId,
         recruitee_company_id: companyId,
         strategy_score: newPriorityData.strategy_score,
