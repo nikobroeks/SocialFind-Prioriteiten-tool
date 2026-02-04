@@ -13,9 +13,10 @@ ALTER TABLE public.vacancy_priorities
 UPDATE public.vacancy_priorities
 SET client_pain_level = CASE 
   WHEN client_pain = true THEN 'Ja'
-  ELSE 'Nee'
+  WHEN client_pain = false THEN 'Nee'
+  ELSE 'Nee'  -- Default voor NULL
 END
-WHERE client_pain_level IS NULL;
+WHERE client_pain_level IS NULL AND client_pain IS NOT NULL;
 
 -- Oude strategy_score -> strategic_value (ongeveer)
 UPDATE public.vacancy_priorities
@@ -27,6 +28,19 @@ SET strategic_value = CASE
 END
 WHERE strategic_value IS NULL AND strategy_score IS NOT NULL;
 
+-- Oude hiring_chance -> time_criticality (ongeveer)
+-- High = Tegen het einde, Medium = Lopend, Low = Net begonnen
+UPDATE public.vacancy_priorities
+SET time_criticality = CASE
+  WHEN hiring_chance = 'High' THEN 'Tegen het einde van samenwerking'
+  WHEN hiring_chance = 'Medium' THEN 'Lopend'
+  WHEN hiring_chance = 'Low' THEN 'Net begonnen'
+  ELSE NULL
+END
+WHERE time_criticality IS NULL AND hiring_chance IS NOT NULL;
+
+-- Note: account_health heeft geen oude equivalent, moet handmatig worden ingevuld
+
 -- Stap 3: Verwijder oude kolommen (pas op: dit verwijdert data!)
 -- ALTER TABLE public.vacancy_priorities
 --   DROP COLUMN IF EXISTS strategy_score,
@@ -36,7 +50,18 @@ WHERE strategic_value IS NULL AND strategy_score IS NOT NULL;
 -- Stap 4: Herbereken alle prioriteiten met nieuwe logica
 -- (Dit moet via de applicatie gebeuren, niet via SQL)
 
--- Verifieer de nieuwe structuur
+-- Verifieer dat de kolommen zijn toegevoegd
+SELECT 
+  column_name,
+  data_type,
+  is_nullable
+FROM information_schema.columns
+WHERE table_schema = 'public' 
+  AND table_name = 'vacancy_priorities'
+  AND column_name IN ('client_pain_level', 'time_criticality', 'strategic_value', 'account_health')
+ORDER BY column_name;
+
+-- Verifieer de nieuwe structuur met data
 SELECT 
   id,
   recruitee_job_id,
@@ -45,7 +70,12 @@ SELECT
   strategic_value,
   account_health,
   calculated_priority,
-  manual_override
+  manual_override,
+  -- Oude velden (voor verificatie)
+  client_pain,
+  strategy_score,
+  hiring_chance
 FROM public.vacancy_priorities
-LIMIT 5;
+ORDER BY updated_at DESC
+LIMIT 10;
 
