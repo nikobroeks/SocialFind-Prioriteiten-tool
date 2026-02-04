@@ -14,13 +14,16 @@ export async function POST(request: Request) {
     }
 
     // Check if current user is admin
-    const { data: currentUserRole } = await supabase
+    const { data: currentUserRole, error: roleError } = await supabase
       .from('user_roles')
       .select('role')
       .eq('user_id', currentUser.id)
-      .single();
+      .maybeSingle();
 
-    if (!currentUserRole || currentUserRole.role !== 'admin') {
+    type UserRoleData = { role: 'admin' | 'viewer' } | null;
+    const roleData = currentUserRole as UserRoleData;
+
+    if (roleError || !roleData || roleData.role !== 'admin') {
       return NextResponse.json(
         { error: 'Only admins can assign roles' },
         { status: 403 }
