@@ -69,21 +69,64 @@ export async function fetchRecruiteeJobs(
 
     const responseData = await response.json();
     
-    // Recruitee API response format: { meta: {...}, offers: [...] }
+    // DEBUG: Log de response structuur om te zien waar tags zitten
+    console.log('[RECRUITEE API] Response structure:', {
+      isArray: Array.isArray(responseData),
+      topLevelKeys: Object.keys(responseData),
+      hasOffers: 'offers' in responseData,
+      hasReferences: 'references' in responseData,
+      sampleOffer: Array.isArray(responseData) 
+        ? responseData[0] 
+        : responseData.offers?.[0] || null
+    });
+    
+    // Recruitee API response format: { meta: {...}, offers: [...], references: [...] }
     // "offers" zijn de jobs/vacatures
+    // "references" kunnen tags bevatten die gekoppeld zijn aan offers via IDs
     let jobs: RecruiteeJob[] = [];
+    let references: any[] = [];
     
     if (Array.isArray(responseData)) {
       jobs = responseData;
     } else if (responseData.offers) {
       // Recruitee gebruikt "offers" voor jobs
       jobs = responseData.offers;
+      // Check voor references (tags kunnen hierin zitten)
+      references = responseData.references || [];
     } else if (responseData.jobs) {
       jobs = responseData.jobs;
+      references = responseData.references || [];
     } else if (responseData.data?.offers) {
       jobs = responseData.data.offers;
+      references = responseData.data.references || responseData.references || [];
     } else if (responseData.data?.jobs) {
       jobs = responseData.data.jobs;
+      references = responseData.data.references || responseData.references || [];
+    }
+    
+    // DEBUG: Check voor tags in references
+    if (references.length > 0) {
+      const tagReferences = references.filter((ref: any) => 
+        ref.type === 'Tag' || ref.type === 'Label' || ref.type === 'tag' || ref.type === 'label'
+      );
+      console.log('[RECRUITEE API] Found references:', {
+        total: references.length,
+        tagReferences: tagReferences.length,
+        tagSample: tagReferences.slice(0, 3)
+      });
+    }
+    
+    // Maak een map van tag references voor snelle lookup
+    const tagMap = new Map<number, any>();
+    if (references && Array.isArray(references)) {
+      references.forEach((ref: any) => {
+        // Check voor Tag, Label, of andere tag-gerelateerde types
+        if (ref.type === 'Tag' || ref.type === 'Label' || 
+            ref.type === 'tag' || ref.type === 'label' ||
+            (ref.type && ref.type.toLowerCase().includes('tag'))) {
+          tagMap.set(ref.id, ref);
+        }
+      });
     }
     
     // Recruitee "offers" hebben mogelijk geen direct company_id veld
@@ -106,8 +149,49 @@ export async function fetchRecruiteeJobs(
                        parseInt(RECRUITEE_COMPANY_ID!); // Fallback naar de company ID uit de URL
       
       // NIEUWE LOGICA: Tags zijn nu de primaire bron voor bedrijfsidentificatie
+      // EERST: Probeer tags uit verschillende bronnen
+      // 1. Direct tags veld
+      // 2. tag_ids + references lookup
+      // 3. tag_names
+      let jobTags: any[] = [];
+      
+      // Check direct tags veld
+      if (job.tags && Array.isArray(job.tags)) {
+        jobTags = job.tags;
+      } else if (job.tag_names && Array.isArray(job.tag_names)) {
+        jobTags = job.tag_names.map((name: string) => ({ name }));
+      } else if (job.labels && Array.isArray(job.labels)) {
+        jobTags = job.labels;
+      } else if (job.label_names && Array.isArray(job.label_names)) {
+        jobTags = job.label_names.map((name: string) => ({ name }));
+      }
+      
+      // Check tag_ids en lookup in references
+      if (jobTags.length === 0 && (job.tag_ids || job.tagIds)) {
+        const tagIds = job.tag_ids || job.tagIds || [];
+        if (Array.isArray(tagIds) && tagIds.length > 0) {
+          jobTags = tagIds
+            .map((id: number) => tagMap.get(id))
+            .filter(Boolean)
+            .map((ref: any) => ({
+              id: ref.id,
+              name: ref.name || ref.label || ref.title,
+              label: ref.label || ref.name
+            }));
+        }
+      }
+      
+      // Maak een enriched job object met tags voor extractCompanyFromTags
+      const jobWithTags = {
+        ...job,
+        tags: jobTags.length > 0 ? jobTags : (job.tags || []),
+        tag_names: jobTags.length > 0 ? jobTags.map((t: any) => t.name || t.label || t) : (job.tag_names || []),
+        _rawTags: jobTags,
+        _tagIds: job.tag_ids || job.tagIds || []
+      };
+      
       // EERST: Probeer bedrijfsnaam uit tags te halen (PRIMAIRE BRON)
-      const companyNameFromTags = extractCompanyFromTags(job);
+      const companyNameFromTags = extractCompanyFromTags(jobWithTags);
       
       // TWEEDE: Als geen tags, probeer uit titel (fallback)
       let companyNameFromTitle: string | null = null;
@@ -133,11 +217,20 @@ export async function fetchRecruiteeJobs(
       
       // Log voor debugging (alleen eerste paar jobs)
       if (jobs.indexOf(job) < 3) {
-        const tags = job.tags || job.tag_names || job.labels || job.label_names || [];
-        console.log(`[TAGS] Job "${job.title}":`, {
-          tags: tags,
-          companyNameFromTags: companyNameFromTags,
-          companyNameFromTitle: companyNameFromTitle,
+        console.log(`[TAGS DEBUG] Job "${job.title}" (ID: ${job.id}):`, {
+          rawJobKeys: Object.keys(job).filter(k => 
+            k.toLowerCase().includes('tag') || 
+            k.toLowerCase().includes('label') ||
+            k.toLowerCase().includes('category')
+          ),
+          tagIds: job.tag_ids || job.tagIds || 'none',
+          directTags: job.tags || 'none',
+          tagNames: job.tag_names || 'none',
+          labels: job.labels || 'none',
+          labelNames: job.label_names || 'none',
+          foundTags: jobTags.length > 0 ? jobTags : 'none',
+          companyNameFromTags: companyNameFromTags || 'none',
+          companyNameFromTitle: companyNameFromTitle || 'none',
           finalCompanyName: companyName,
           source: companyNameFromTags ? 'tags' : companyNameFromTitle ? 'title' : 'other'
         });
@@ -147,7 +240,7 @@ export async function fetchRecruiteeJobs(
       const companyStringId = getCompanyId(companyName);
       
       // Behoud tags voor debugging/testing
-      const tags = job.tags || job.tag_names || job.labels || job.label_names || [];
+      const finalTags = jobTags.length > 0 ? jobTags : (job.tags || job.tag_names || job.labels || job.label_names || []);
       
       return {
         ...job,
@@ -155,7 +248,9 @@ export async function fetchRecruiteeJobs(
         // Gebruik de string ID als unieke identifier voor groepering
         company_string_id: companyStringId,
         // Behoud tags voor debugging/testing
-        _tags: tags,
+        tags: finalTags,
+        _tags: finalTags,
+        _tagIds: job.tag_ids || job.tagIds || [],
         _companyNameSource: companyNameFromTags ? 'tags' : companyNameFromTitle ? 'title' : 'other',
         company: {
           id: companyId,
