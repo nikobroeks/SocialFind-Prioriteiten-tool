@@ -12,7 +12,7 @@ import {
   RecruiteeCandidate,
   RecruiteeCandidatesResponse
 } from '@/types/recruitee';
-import { extractCompanyFromTitle, getCompanyId, cleanCompanyName, extractCompanyFromTags } from './company-extractor';
+import { extractCompanyFromTitle, getCompanyId, cleanCompanyName } from './company-extractor';
 
 const RECRUITEE_API_KEY = process.env.RECRUITEE_API_KEY;
 const RECRUITEE_COMPANY_ID = process.env.RECRUITEE_COMPANY_ID;
@@ -69,94 +69,21 @@ export async function fetchRecruiteeJobs(
 
     const responseData = await response.json();
     
-      // DEBUG: Log de response structuur om te zien waar tags zitten
-      const sampleOffer = Array.isArray(responseData) 
-        ? responseData[0] 
-        : responseData.offers?.[0] || null;
-      
-      console.log('[RECRUITEE API] Response structure:', {
-        isArray: Array.isArray(responseData),
-        topLevelKeys: Object.keys(responseData),
-        hasOffers: 'offers' in responseData,
-        hasReferences: 'references' in responseData,
-        sampleOfferKeys: sampleOffer ? Object.keys(sampleOffer) : null,
-        sampleOfferTagFields: sampleOffer ? Object.keys(sampleOffer).filter(k => 
-          k.toLowerCase().includes('tag') || 
-          k.toLowerCase().includes('label') ||
-          k.toLowerCase().includes('company')
-        ) : null
-      });
-      
-      // Log eerste offer in detail voor tag debugging
-      if (sampleOffer) {
-        console.log('[RECRUITEE API] Sample offer detail:', {
-          id: sampleOffer.id,
-          title: sampleOffer.title,
-          allKeys: Object.keys(sampleOffer),
-          tagRelatedKeys: Object.keys(sampleOffer).filter(k => 
-            k.toLowerCase().includes('tag') || 
-            k.toLowerCase().includes('label')
-          ),
-          company: sampleOffer.company,
-          company_id: sampleOffer.company_id,
-          department: sampleOffer.department,
-          // Check alle mogelijke tag velden
-          tags: sampleOffer.tags,
-          tag_ids: sampleOffer.tag_ids,
-          tagIds: sampleOffer.tagIds,
-          tag_names: sampleOffer.tag_names,
-          labels: sampleOffer.labels,
-          label_names: sampleOffer.label_names
-        });
-      }
-    
-    // Recruitee API response format: { meta: {...}, offers: [...], references: [...] }
+    // Recruitee API response format: { meta: {...}, offers: [...] }
     // "offers" zijn de jobs/vacatures
-    // "references" kunnen tags bevatten die gekoppeld zijn aan offers via IDs
     let jobs: RecruiteeJob[] = [];
-    let references: any[] = [];
     
     if (Array.isArray(responseData)) {
       jobs = responseData;
     } else if (responseData.offers) {
       // Recruitee gebruikt "offers" voor jobs
       jobs = responseData.offers;
-      // Check voor references (tags kunnen hierin zitten)
-      references = responseData.references || [];
     } else if (responseData.jobs) {
       jobs = responseData.jobs;
-      references = responseData.references || [];
     } else if (responseData.data?.offers) {
       jobs = responseData.data.offers;
-      references = responseData.data.references || responseData.references || [];
     } else if (responseData.data?.jobs) {
       jobs = responseData.data.jobs;
-      references = responseData.data.references || responseData.references || [];
-    }
-    
-    // DEBUG: Check voor tags in references
-    if (references.length > 0) {
-      const tagReferences = references.filter((ref: any) => 
-        ref.type === 'Tag' || ref.type === 'Label' || ref.type === 'tag' || ref.type === 'label'
-      );
-      console.log('[RECRUITEE API] Found references:', {
-        total: references.length,
-        tagReferences: tagReferences.length,
-        tagSample: tagReferences.slice(0, 3)
-      });
-    }
-    
-    // Maak een map van tag references voor snelle lookup
-    const tagMap = new Map<number, any>();
-    if (references && Array.isArray(references)) {
-      references.forEach((ref: any) => {
-        // Check voor Tag, Label, of andere tag-gerelateerde types
-        if (ref.type === 'Tag' || ref.type === 'Label' || 
-            ref.type === 'tag' || ref.type === 'label' ||
-            (ref.type && ref.type.toLowerCase().includes('tag'))) {
-          tagMap.set(ref.id, ref);
-        }
-      });
     }
     
     // Recruitee "offers" hebben mogelijk geen direct company_id veld
@@ -178,112 +105,16 @@ export async function fetchRecruiteeJobs(
                        job.department?.company_id ||
                        parseInt(RECRUITEE_COMPANY_ID!); // Fallback naar de company ID uit de URL
       
-      // NIEUWE LOGICA: Tags zijn nu de primaire bron voor bedrijfsidentificatie
-      // EERST: Probeer tags uit verschillende bronnen
-      // 1. Direct tags veld
-      // 2. tag_ids + references lookup
-      // 3. tag_names
-      let jobTags: any[] = [];
-      
-      // DEBUG: Log alle mogelijke tag velden voor eerste paar jobs
-      if (jobs.indexOf(job) < 3) {
-        console.log(`[TAGS RAW] Job "${job.title}" (ID: ${job.id}) - All keys:`, Object.keys(job));
-        console.log(`[TAGS RAW] Direct tag fields:`, {
-          tags: job.tags,
-          tag_names: job.tag_names,
-          tag_ids: job.tag_ids,
-          tagIds: job.tagIds,
-          labels: job.labels,
-          label_names: job.label_names,
-          custom_fields: job.custom_fields,
-          metadata: job.metadata
-        });
+      // Extract bedrijfsnaam uit titel (PRIMAIRE BRON)
+      let companyNameFromTitle = extractCompanyFromTitle(job.title || '');
+      if (companyNameFromTitle !== 'Onbekend Bedrijf') {
+        companyNameFromTitle = cleanCompanyName(companyNameFromTitle);
+      } else {
+        companyNameFromTitle = null;
       }
       
-      // Check direct tags veld
-      if (job.tags && Array.isArray(job.tags)) {
-        jobTags = job.tags;
-        if (jobs.indexOf(job) < 3) {
-          console.log(`[TAGS] Found direct tags array:`, jobTags);
-        }
-      } else if (job.tag_names && Array.isArray(job.tag_names)) {
-        jobTags = job.tag_names.map((name: string) => ({ name }));
-        if (jobs.indexOf(job) < 3) {
-          console.log(`[TAGS] Found tag_names array:`, job.tag_names);
-        }
-      } else if (job.labels && Array.isArray(job.labels)) {
-        jobTags = job.labels;
-        if (jobs.indexOf(job) < 3) {
-          console.log(`[TAGS] Found labels array:`, jobTags);
-        }
-      } else if (job.label_names && Array.isArray(job.label_names)) {
-        jobTags = job.label_names.map((name: string) => ({ name }));
-        if (jobs.indexOf(job) < 3) {
-          console.log(`[TAGS] Found label_names array:`, job.label_names);
-        }
-      }
-      
-      // Check tag_ids en lookup in references
-      if (jobTags.length === 0 && (job.tag_ids || job.tagIds)) {
-        const tagIds = job.tag_ids || job.tagIds || [];
-        if (Array.isArray(tagIds) && tagIds.length > 0) {
-          if (jobs.indexOf(job) < 3) {
-            console.log(`[TAGS] Found tag_ids:`, tagIds, `Tag map size:`, tagMap.size);
-          }
-          jobTags = tagIds
-            .map((id: number) => {
-              const ref = tagMap.get(id);
-              if (jobs.indexOf(job) < 3 && ref) {
-                console.log(`[TAGS] Found reference for tag_id ${id}:`, ref);
-              }
-              return ref;
-            })
-            .filter(Boolean)
-            .map((ref: any) => ({
-              id: ref.id,
-              name: ref.name || ref.label || ref.title,
-              label: ref.label || ref.name
-            }));
-          if (jobs.indexOf(job) < 3) {
-            console.log(`[TAGS] Resolved tags from references:`, jobTags);
-          }
-        }
-      }
-      
-      // Maak een enriched job object met tags voor extractCompanyFromTags
-      const jobWithTags = {
-        ...job,
-        tags: jobTags.length > 0 ? jobTags : (job.tags || []),
-        tag_names: jobTags.length > 0 ? jobTags.map((t: any) => t.name || t.label || t) : (job.tag_names || []),
-        _rawTags: jobTags,
-        _tagIds: job.tag_ids || job.tagIds || []
-      };
-      
-      // EERST: Probeer bedrijfsnaam uit tags te halen (PRIMAIRE BRON)
-      const companyNameFromTags = extractCompanyFromTags(jobWithTags);
-      
-      if (jobs.indexOf(job) < 3) {
-        console.log(`[TAGS RESULT] Job "${job.title}":`, {
-          jobTagsFound: jobTags.length,
-          jobTags: jobTags,
-          companyNameFromTags: companyNameFromTags || 'none'
-        });
-      }
-      
-      // TWEEDE: Als geen tags, probeer uit titel (fallback)
-      let companyNameFromTitle: string | null = null;
-      if (!companyNameFromTags) {
-        companyNameFromTitle = extractCompanyFromTitle(job.title || '');
-        if (companyNameFromTitle !== 'Onbekend Bedrijf') {
-          companyNameFromTitle = cleanCompanyName(companyNameFromTitle);
-        } else {
-          companyNameFromTitle = null;
-        }
-      }
-      
-      // DERDE: Fallback naar andere velden
-      const companyName = companyNameFromTags || 
-                         companyNameFromTitle ||
+      // Fallback naar andere velden
+      const companyName = companyNameFromTitle ||
                          cleanCompanyName(
                            job.company?.name ||
                            job.company_name || 
@@ -292,43 +123,14 @@ export async function fetchRecruiteeJobs(
                            'Onbekend Bedrijf'
                          );
       
-      // Log voor debugging (alleen eerste paar jobs)
-      if (jobs.indexOf(job) < 3) {
-        console.log(`[TAGS DEBUG] Job "${job.title}" (ID: ${job.id}):`, {
-          rawJobKeys: Object.keys(job).filter(k => 
-            k.toLowerCase().includes('tag') || 
-            k.toLowerCase().includes('label') ||
-            k.toLowerCase().includes('category')
-          ),
-          tagIds: job.tag_ids || job.tagIds || 'none',
-          directTags: job.tags || 'none',
-          tagNames: job.tag_names || 'none',
-          labels: job.labels || 'none',
-          labelNames: job.label_names || 'none',
-          foundTags: jobTags.length > 0 ? jobTags : 'none',
-          companyNameFromTags: companyNameFromTags || 'none',
-          companyNameFromTitle: companyNameFromTitle || 'none',
-          finalCompanyName: companyName,
-          source: companyNameFromTags ? 'tags' : companyNameFromTitle ? 'title' : 'other'
-        });
-      }
-      
       // Gebruik een string ID voor de company (op basis van naam) voor groepering
       const companyStringId = getCompanyId(companyName);
-      
-      // Behoud tags voor debugging/testing
-      const finalTags = jobTags.length > 0 ? jobTags : (job.tags || job.tag_names || job.labels || job.label_names || []);
       
       return {
         ...job,
         company_id: companyId,
         // Gebruik de string ID als unieke identifier voor groepering
         company_string_id: companyStringId,
-        // Behoud tags voor debugging/testing
-        tags: finalTags,
-        _tags: finalTags,
-        _tagIds: job.tag_ids || job.tagIds || [],
-        _companyNameSource: companyNameFromTags ? 'tags' : companyNameFromTitle ? 'title' : 'other',
         company: {
           id: companyId,
           name: companyName,
