@@ -2,18 +2,74 @@
 
 import { VacancyWithPriority } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
-import { Edit2, Users } from 'lucide-react';
-import { useState } from 'react';
+import { Edit2, Users, ChevronDown, Building2 } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import { PriorityModal } from './priority-modal';
+import { useNotifications } from '@/contexts/notifications-context';
 
 interface VacancyRowProps {
   vacancy: VacancyWithPriority;
   isAdmin: boolean;
   applicantCount?: number;
+  allCompanies?: Array<{ id: number; name: string }>;
+  onCompanyAssign?: (jobId: number, companyName: string) => void;
 }
 
-export function VacancyRow({ vacancy, isAdmin, applicantCount = 0 }: VacancyRowProps) {
+export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, allCompanies = [], onCompanyAssign }: VacancyRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAssigningCompany, setIsAssigningCompany] = useState(false);
+  const [selectedCompany, setSelectedCompany] = useState<string>('');
+  const [showCompanyDropdown, setShowCompanyDropdown] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+  const { addNotification } = useNotifications();
+  const isUnknownCompany = vacancy.company.name === 'Onbekend Bedrijf';
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowCompanyDropdown(false);
+      }
+    };
+
+    if (showCompanyDropdown) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCompanyDropdown]);
+
+  const handleAssignCompany = async () => {
+    if (!selectedCompany || !onCompanyAssign) return;
+    
+    setIsAssigningCompany(true);
+    try {
+      await onCompanyAssign(vacancy.job.id, selectedCompany);
+      addNotification({
+        type: 'success',
+        title: 'Succesvol',
+        message: `Vacature toegewezen aan "${selectedCompany}"`,
+      });
+      setShowCompanyDropdown(false);
+      setSelectedCompany('');
+    } catch (error: any) {
+      addNotification({
+        type: 'error',
+        title: 'Fout',
+        message: error.message || 'Er is een fout opgetreden',
+      });
+    } finally {
+      setIsAssigningCompany(false);
+    }
+  };
+
+  const filteredCompanies = allCompanies.filter(c => 
+    c.name.toLowerCase().includes(selectedCompany.toLowerCase()) &&
+    c.name !== 'Onbekend Bedrijf' &&
+    c.name !== 'Overig'
+  );
 
   return (
     <>
@@ -30,6 +86,48 @@ export function VacancyRow({ vacancy, isAdmin, applicantCount = 0 }: VacancyRowP
                       <Users className="h-3 w-3 text-blue-600" />
                       <span className="text-xs font-semibold text-blue-700">{applicantCount}</span>
                       <span className="text-xs text-blue-600">sollicitanten</span>
+                    </div>
+                  </div>
+                )}
+                {isAdmin && isUnknownCompany && (
+                  <div className="mt-2">
+                    <div className="text-xs text-gray-500 mb-1">Wijs toe aan bedrijf:</div>
+                    <div className="relative" ref={dropdownRef}>
+                      <input
+                        type="text"
+                        placeholder="Zoek bedrijf..."
+                        value={selectedCompany}
+                        onChange={(e) => setSelectedCompany(e.target.value)}
+                        onFocus={() => setShowCompanyDropdown(true)}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                      {showCompanyDropdown && (
+                        <div className="absolute z-50 w-full mt-1 bg-white rounded-lg shadow-lg border border-gray-200 max-h-48 overflow-y-auto">
+                          <div className="p-2 space-y-1">
+                            {filteredCompanies.slice(0, 10).map((company) => (
+                              <button
+                                key={company.id}
+                                onClick={() => {
+                                  setSelectedCompany(company.name);
+                                  handleAssignCompany();
+                                }}
+                                className="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 rounded transition-colors"
+                              >
+                                {company.name}
+                              </button>
+                            ))}
+                            {selectedCompany && !filteredCompanies.find(c => c.name.toLowerCase() === selectedCompany.toLowerCase()) && (
+                              <button
+                                onClick={handleAssignCompany}
+                                disabled={isAssigningCompany}
+                                className="w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 text-blue-600 rounded transition-colors font-medium"
+                              >
+                                {isAssigningCompany ? 'Toewijzen...' : `Gebruik "${selectedCompany}"`}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -86,9 +184,65 @@ export function VacancyRow({ vacancy, isAdmin, applicantCount = 0 }: VacancyRowP
       {/* Desktop table view */}
       <tr className="hidden sm:table-row border-b border-gray-100 hover:bg-orange-50/50 transition-colors group">
         <td className="p-2 font-medium text-gray-900 text-sm align-top">
-          <span className="group-hover:text-orange-600 transition-colors break-words">
-            {vacancy.job.title}
-          </span>
+          <div className="flex items-start gap-2">
+            <span className="group-hover:text-orange-600 transition-colors break-words flex-1">
+              {vacancy.job.title}
+            </span>
+            {isAdmin && isUnknownCompany && (
+              <div className="relative flex-shrink-0" ref={dropdownRef}>
+                <button
+                  onClick={() => setShowCompanyDropdown(!showCompanyDropdown)}
+                  className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded transition-colors border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+                  title="Wijs toe aan bedrijf"
+                >
+                  <Building2 className="h-3 w-3" />
+                  <ChevronDown className={`h-3 w-3 transition-transform ${showCompanyDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showCompanyDropdown && (
+                  <div className="absolute right-0 top-full mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-60 overflow-y-auto">
+                    <div className="p-2">
+                      <input
+                        type="text"
+                        placeholder="Zoek bedrijf..."
+                        value={selectedCompany}
+                        onChange={(e) => setSelectedCompany(e.target.value)}
+                        className="w-full px-2 py-1 text-xs border border-gray-300 rounded mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        autoFocus
+                      />
+                      <div className="space-y-1">
+                        {filteredCompanies.slice(0, 10).map((company) => (
+                          <button
+                            key={company.id}
+                            onClick={() => {
+                              setSelectedCompany(company.name);
+                              handleAssignCompany();
+                            }}
+                            className="w-full text-left px-2 py-1.5 text-xs hover:bg-gray-100 rounded transition-colors"
+                          >
+                            {company.name}
+                          </button>
+                        ))}
+                        {selectedCompany && !filteredCompanies.find(c => c.name.toLowerCase() === selectedCompany.toLowerCase()) && (
+                          <button
+                            onClick={handleAssignCompany}
+                            disabled={isAssigningCompany}
+                            className="w-full text-left px-2 py-1.5 text-xs hover:bg-blue-50 text-blue-600 rounded transition-colors font-medium disabled:opacity-50"
+                          >
+                            {isAssigningCompany ? 'Toewijzen...' : `Gebruik "${selectedCompany}"`}
+                          </button>
+                        )}
+                        {filteredCompanies.length === 0 && !selectedCompany && (
+                          <div className="px-2 py-1.5 text-xs text-gray-500">
+                            Geen bedrijven gevonden
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </td>
         <td className="p-2 pr-4 text-xs text-gray-700 whitespace-nowrap text-center align-top">
           <div className="flex items-center justify-center gap-1">

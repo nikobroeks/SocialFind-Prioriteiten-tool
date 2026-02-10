@@ -12,7 +12,7 @@ import {
   RecruiteeCandidate,
   RecruiteeCandidatesResponse
 } from '@/types/recruitee';
-import { extractCompanyFromTitle, getCompanyId } from './company-extractor';
+import { extractCompanyFromTitle, getCompanyId, cleanCompanyName } from './company-extractor';
 
 const RECRUITEE_API_KEY = process.env.RECRUITEE_API_KEY;
 const RECRUITEE_COMPANY_ID = process.env.RECRUITEE_COMPANY_ID;
@@ -107,15 +107,22 @@ export async function fetchRecruiteeJobs(
       
       // Probeer company naam uit verschillende velden
       // EERST proberen uit de titel te halen (klantbedrijf)
-      const companyNameFromTitle = extractCompanyFromTitle(job.title || '');
+      let companyNameFromTitle = extractCompanyFromTitle(job.title || '');
+      
+      // Clean the extracted company name to remove unwanted suffixes
+      if (companyNameFromTitle !== 'Onbekend Bedrijf') {
+        companyNameFromTitle = cleanCompanyName(companyNameFromTitle);
+      }
       
       const companyName = companyNameFromTitle !== 'Onbekend Bedrijf' 
         ? companyNameFromTitle
-        : job.company?.name ||
-          job.company_name || 
-          job.companyName ||
-          job.department?.company?.name ||
-          'Onbekend Bedrijf'; // Fallback naam
+        : cleanCompanyName(
+            job.company?.name ||
+            job.company_name || 
+            job.companyName ||
+            job.department?.company?.name ||
+            'Onbekend Bedrijf'
+          );
       
       // Gebruik een string ID voor de company (op basis van naam) voor groepering
       const companyStringId = getCompanyId(companyName);

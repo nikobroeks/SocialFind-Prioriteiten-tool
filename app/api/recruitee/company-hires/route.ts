@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { cleanCompanyName } from '@/lib/company-extractor';
 
 /**
  * Get hires per company for the last 90 days
@@ -85,6 +86,9 @@ export async function GET(request: Request) {
           .replace(/\s+/g, ' ') // Multiple spaces to single space
           .replace(/\.$/, '') // Remove trailing dot
           .trim();
+        
+        // Remove recruitment-related suffixes like "Linkedin Pipeline"
+        companyName = cleanCompanyName(companyName);
         
         if (companyName && companyName !== 'Unknown Company') {
           companyHires[companyName] = (companyHires[companyName] || 0) + 1;

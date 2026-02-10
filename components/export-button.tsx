@@ -110,6 +110,42 @@ export function ExportButton({ vacancies, companyGroups, variant = 'default' }: 
     }
   };
 
+  const handleExportCompaniesJobs = async () => {
+    setIsExporting(true);
+    try {
+      const response = await fetch('/api/export/companies-jobs');
+      if (!response.ok) {
+        throw new Error('Failed to export companies and jobs');
+      }
+      
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const timestamp = new Date().toISOString().split('T')[0];
+      a.download = `bedrijven-en-jobs-${timestamp}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+      
+      addNotification({
+        type: 'success',
+        title: 'Export succesvol',
+        message: 'Bedrijven en jobs geëxporteerd',
+      });
+    } catch (error) {
+      console.error('Export error:', error);
+      addNotification({
+        type: 'error',
+        title: 'Export mislukt',
+        message: 'Er is een fout opgetreden bij het exporteren van bedrijven en jobs',
+      });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (variant === 'icon') {
     return (
       <div className="relative group">
@@ -163,6 +199,14 @@ export function ExportButton({ vacancies, companyGroups, variant = 'default' }: 
           >
             <FileSpreadsheet className="h-4 w-4" />
             Export Alles
+          </button>
+          <div className="border-t border-gray-200 my-1"></div>
+          <button
+            onClick={handleExportCompaniesJobs}
+            className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2"
+          >
+            <FileSpreadsheet className="h-4 w-4" />
+            Export Bedrijven & Jobs (voor review)
           </button>
         </div>
       </div>

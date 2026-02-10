@@ -6,18 +6,21 @@ import { getAllPriorities } from '@/lib/supabase/queries';
 import { VacancyWithPriority, CompanyGroup } from '@/types/dashboard';
 import { getDisplayPriority } from '@/lib/utils';
 import { PriorityColor } from '@/types/dashboard';
+import { areCompaniesSame, cleanCompanyName, isKnownCompany } from '@/lib/company-extractor';
 import { PriorityBadge } from './priority-badge';
 import { VacancyRow } from './vacancy-row';
 import { DashboardHeader } from './dashboard-header';
 import { ViewToggle, ViewMode } from './view-toggle';
 import { KanbanView } from './kanban-view';
 import { CompactView } from './compact-view';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { getUserRole } from '@/lib/supabase/queries';
 import { Building2, TrendingUp, AlertCircle, Users, EyeOff, Search, Settings, Clock, Edit2 } from 'lucide-react';
 import { CompanyVisibilityToggle } from './company-visibility-toggle';
 import { CompanyVisibilityModal } from './company-visibility-modal';
 import { CompanyHoursModal } from './company-hours-modal';
+import { CompanyManagementModal } from './company-management-modal';
 import { SearchBar } from './search-bar';
 import { ExportButton } from './export-button';
 import { DashboardAnalytics } from './dashboard-analytics';
@@ -29,7 +32,9 @@ export default function Dashboard() {
   const [searchQuery, setSearchQuery] = useState('');
   const [isCompanyVisibilityModalOpen, setIsCompanyVisibilityModalOpen] = useState(false);
   const [companyHoursModal, setCompanyHoursModal] = useState<{ companyId: number; companyName: string } | null>(null);
+  const [isCompanyManagementModalOpen, setIsCompanyManagementModalOpen] = useState(false);
   const { addNotification } = useNotifications();
+  const queryClient = useQueryClient();
 
   const handleSearch = useCallback((query: string) => {
     setSearchQuery(query);
@@ -143,6 +148,21 @@ export default function Dashboard() {
   const companyHires = companyHiresData?.companyHires || {};
   const applicantsPerVacancy = vacancyApplicantsData?.applicantsPerVacancy || {};
   const companyHours = companyHoursData?.hours || [];
+
+  // Fetch known companies from database
+  const { data: knownCompaniesData } = useQuery({
+    queryKey: ['known-companies'],
+    queryFn: async () => {
+      const response = await fetch('/api/known-companies');
+      if (!response.ok) throw new Error('Failed to fetch known companies');
+      return response.json();
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
+  const knownCompaniesFromDB = knownCompaniesData?.companies?.map((c: any) => c.company_name) || [];
   
   // Helper function to normalize company names for matching
   const normalizeCompanyName = (name: string): string => {
@@ -217,7 +237,13 @@ export default function Dashboard() {
                          `Company ${job.company_id}`;
       company = {
         id: job.company_id,
-        name: companyName,
+        name: cleanCompanyName(companyName),
+      };
+    } else if (company && company.name) {
+      // Clean existing company name
+      company = {
+        ...company,
+        name: cleanCompanyName(company.name),
       };
     }
     if (!company) {
@@ -252,10 +278,25 @@ export default function Dashboard() {
       : 'Green'; // Default to Green if no priority set
 
     // Extract company data - check verschillende mogelijke velden
+    // PRIORITEIT: gebruik eerst company_name (kan handmatig zijn geüpdatet), dan company.name, dan extractie uit titel
     let company = job.company;
     
-    // Als er geen company object is, probeer het uit andere velden te halen
-    if (!company && job.company_id) {
+    // Check eerst of er een handmatig geüpdate company_name is (van assign-vacancies)
+    const manualCompanyName = (job as any).company_name;
+    
+    if (manualCompanyName && manualCompanyName !== 'Onbekend Bedrijf') {
+      // Gebruik de handmatig geüpdate company name
+      company = {
+        id: job.company_id || (company?.id || 0),
+        name: cleanCompanyName(manualCompanyName),
+      };
+    } else if (company && company.name) {
+      // Clean existing company name
+      company = {
+        ...company,
+        name: cleanCompanyName(company.name),
+      };
+    } else if (!company && job.company_id) {
       // Check of er een company_name veld is
       const companyName = (job as any).company_name || 
                          (job as any).company?.name || 
@@ -263,7 +304,7 @@ export default function Dashboard() {
       
       company = {
         id: job.company_id,
-        name: companyName,
+        name: cleanCompanyName(companyName),
       };
     }
 
@@ -285,6 +326,7 @@ export default function Dashboard() {
 
   // Group ALL companies first (including those with no visible jobs)
   // This ensures companies are always visible even if all their jobs are hidden
+  // Use fuzzy matching to merge similar company names (e.g., "Kader Group" and "Kader")
   const allCompaniesMap = jobs.reduce((acc, job) => {
     // Extract company data
     let company = job.company;
@@ -294,7 +336,13 @@ export default function Dashboard() {
                          `Company ${job.company_id}`;
       company = {
         id: job.company_id,
-        name: companyName,
+        name: cleanCompanyName(companyName),
+      };
+    } else if (company && company.name) {
+      // Clean existing company name
+      company = {
+        ...company,
+        name: cleanCompanyName(company.name),
       };
     }
     if (!company) {
@@ -304,7 +352,22 @@ export default function Dashboard() {
       };
     }
 
-    const companyKey = (job as any).company_string_id || company.id.toString();
+    // Try to find existing company with similar name
+    let existingKey: string | null = null;
+    for (const [key, group] of Object.entries(acc)) {
+      if (areCompaniesSame(group.company.name, company.name)) {
+        existingKey = key;
+        // Use the longer/more complete name if available
+        if (company.name.length > group.company.name.length || 
+            (company.name.toLowerCase().includes('group') && !group.company.name.toLowerCase().includes('group'))) {
+          acc[key].company.name = company.name;
+        }
+        break;
+      }
+    }
+
+    // Use existing key if found, otherwise create new one
+    const companyKey = existingKey || ((job as any).company_string_id || company.id.toString());
     
     if (!acc[companyKey]) {
       acc[companyKey] = {
@@ -316,12 +379,32 @@ export default function Dashboard() {
   }, {} as Record<string, CompanyGroup>);
 
   // Now add visible vacancies to their companies
+  // Use fuzzy matching to find the right company group
   vacanciesWithPriority.forEach((vacancy) => {
     const companyKey = (vacancy.job as any).company_string_id || 
                       vacancy.company.id.toString();
     
+    // Try exact match first
     if (allCompaniesMap[companyKey]) {
       allCompaniesMap[companyKey].vacancies.push(vacancy);
+    } else {
+      // Try fuzzy matching to find similar company
+      let found = false;
+      for (const [key, group] of Object.entries(allCompaniesMap)) {
+        if (areCompaniesSame(group.company.name, vacancy.company.name)) {
+          allCompaniesMap[key].vacancies.push(vacancy);
+          found = true;
+          break;
+        }
+      }
+      
+      // If still not found, create a new entry (shouldn't happen, but just in case)
+      if (!found) {
+        allCompaniesMap[companyKey] = {
+          company: vacancy.company,
+          vacancies: [vacancy],
+        };
+      }
     }
   });
 
@@ -337,13 +420,73 @@ export default function Dashboard() {
     return companyVis ? companyVis.is_visible : true;
   };
 
+  // Auto-hide bedrijven zonder zichtbare vacatures
+  // Check voor elk bedrijf of het zichtbare vacatures heeft
+  const companiesToAutoHide = useMemo(() => {
+    return companyGroups
+      .filter(group => group.vacancies.length === 0)
+      .map(group => ({
+        companyId: group.company.id,
+        companyName: group.company.name
+      }));
+  }, [companyGroups]);
+
+  // Auto-hide bedrijven zonder vacatures (alleen als admin en als er nog geen visibility setting is)
+  useEffect(() => {
+    if (userRole === 'admin' && companiesToAutoHide.length > 0) {
+      companiesToAutoHide.forEach(async ({ companyId, companyName }) => {
+        // Check of er al een visibility setting bestaat
+        const existingVis = companyVisibility.find(
+          (v: any) => v.recruitee_company_id === companyId && v.company_name === companyName
+        );
+        
+        // Alleen auto-hide als er nog geen setting bestaat
+        if (!existingVis) {
+          try {
+            await fetch('/api/company-visibility', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                companyId,
+                companyName,
+                isVisible: false
+              })
+            });
+            // Refresh visibility data
+            queryClient.invalidateQueries({ queryKey: ['company-visibility'] });
+          } catch (error) {
+            console.error('Error auto-hiding company:', error);
+          }
+        }
+      });
+    }
+  }, [companiesToAutoHide.length, userRole, companyVisibility, queryClient]);
+
   // Filter companies based on visibility
-  const visibleCompanyGroups = companyGroups.filter(group => 
-    isCompanyVisible(group.company.id, group.company.name)
-  );
+  const visibleCompanyGroups = companyGroups.filter(group => {
+    // Als bedrijf geen vacatures heeft, verberg het automatisch
+    if (group.vacancies.length === 0) {
+      return false;
+    }
+    return isCompanyVisible(group.company.id, group.company.name);
+  });
+
+  // Split bedrijven in bekende en onbekende (Overig)
+  // Alleen "Onbekend Bedrijf" komt in Overig, alle andere bedrijven blijven gewoon zichtbaar
+  const knownCompanyGroups: CompanyGroup[] = [];
+  const otherCompanyGroups: CompanyGroup[] = [];
+  
+  visibleCompanyGroups.forEach(group => {
+    // Alleen "Onbekend Bedrijf" komt in Overig
+    if (group.company.name === 'Onbekend Bedrijf') {
+      otherCompanyGroups.push(group);
+    } else {
+      knownCompanyGroups.push(group);
+    }
+  });
 
   // Bereken company priority: hoogste priority van alle vacatures binnen dat bedrijf
-  const companyGroupsWithPriority = visibleCompanyGroups.map(group => {
+  const companyGroupsWithPriority = knownCompanyGroups.map(group => {
     const priorities = group.vacancies.map(v => {
       const priorityValue = v.displayPriority === 'Red' ? 3 : 
                            v.displayPriority === 'Orange' ? 2 : 1;
@@ -372,9 +515,51 @@ export default function Dashboard() {
     return a.company.name.localeCompare(b.company.name);
   });
 
+  // Maak "Overig" groep als er onbekende bedrijven zijn
+  const otherCompanyGroupsWithPriority = otherCompanyGroups.map(group => {
+    const priorities = group.vacancies.map(v => {
+      const priorityValue = v.displayPriority === 'Red' ? 3 : 
+                           v.displayPriority === 'Orange' ? 2 : 1;
+      return priorityValue;
+    });
+    const maxPriority = Math.max(...priorities, 0);
+    const companyPriority: PriorityColor = maxPriority === 3 ? 'Red' : 
+                                         maxPriority === 2 ? 'Orange' : 'Green';
+    
+    return {
+      ...group,
+      companyPriority,
+      vacancies: [...group.vacancies].sort((a, b) => {
+        const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
+        return priorityOrder[b.displayPriority] - priorityOrder[a.displayPriority];
+      }),
+    };
+  });
+
+  // Combineer bekende bedrijven met "Overig" groep
+  const finalCompanyGroups: CompanyGroup[] = [...companyGroupsWithPriority];
+  if (otherCompanyGroupsWithPriority.length > 0) {
+    // Bereken priority voor "Overig" groep
+    const otherPriorities = otherCompanyGroupsWithPriority.flatMap(g => g.vacancies.map(v => 
+      v.displayPriority === 'Red' ? 3 : v.displayPriority === 'Orange' ? 2 : 1
+    ));
+    const maxOtherPriority = Math.max(...otherPriorities, 0);
+    const otherCompanyPriority: PriorityColor = maxOtherPriority === 3 ? 'Red' : 
+                                                maxOtherPriority === 2 ? 'Orange' : 'Green';
+    
+    finalCompanyGroups.push({
+      company: {
+        id: -1, // Special ID voor "Overig"
+        name: 'Overig'
+      },
+      vacancies: otherCompanyGroupsWithPriority.flatMap(group => group.vacancies),
+      companyPriority: otherCompanyPriority
+    });
+  }
+
   // Filter op zoekquery
   const filteredCompanyGroups = searchQuery.trim()
-    ? companyGroupsWithPriority.filter((group) => {
+    ? finalCompanyGroups.filter((group) => {
         const query = searchQuery.toLowerCase().trim();
         // Zoek in bedrijfsnaam
         const companyMatch = group.company.name.toLowerCase().includes(query);
@@ -397,7 +582,7 @@ export default function Dashboard() {
         }
         return group;
       })
-    : companyGroupsWithPriority;
+    : finalCompanyGroups;
 
   // Filter vacancies based on company visibility
   const vacanciesWithCompanyVisibility = vacanciesWithPriority.filter(vacancy => 
@@ -450,8 +635,8 @@ export default function Dashboard() {
   console.log('Dashboard data:', {
     jobsCount: jobs.length,
     prioritiesCount: priorities.length,
-    companyGroupsCount: companyGroupsWithPriority.length,
-    companyGroups: companyGroupsWithPriority.map(g => ({
+    companyGroupsCount: finalCompanyGroups.length,
+    companyGroups: finalCompanyGroups.map(g => ({
       id: g.company.id,
       name: g.company.name,
       priority: g.companyPriority,
@@ -467,7 +652,7 @@ export default function Dashboard() {
 
   // Calculate totals
   const totalVacancies = jobs.length;
-  const totalCompanies = companyGroupsWithPriority.length;
+  const totalCompanies = finalCompanyGroups.length;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -492,14 +677,24 @@ export default function Dashboard() {
             </div>
             <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
               {userRole === 'admin' && (
-                <button
-                  onClick={() => setIsCompanyVisibilityModalOpen(true)}
-                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-colors border bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
-                  title="Bedrijf zichtbaarheid beheren"
-                >
-                  <Settings className="h-4 w-4" />
-                  <span className="hidden sm:inline">Bedrijf zichtbaarheid</span>
-                </button>
+                <>
+                  <button
+                    onClick={() => setIsCompanyVisibilityModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-colors border bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                    title="Bedrijf zichtbaarheid beheren"
+                  >
+                    <Settings className="h-4 w-4" />
+                    <span className="hidden sm:inline">Bedrijf zichtbaarheid</span>
+                  </button>
+                  <button
+                    onClick={() => setIsCompanyManagementModalOpen(true)}
+                    className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-colors border bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                    title="Bedrijf beheer (Overig)"
+                  >
+                    <Building2 className="h-4 w-4" />
+                    <span className="hidden sm:inline">Bedrijf beheer</span>
+                  </button>
+                </>
               )}
               <ExportButton
                 vacancies={filteredVacancies}
@@ -760,6 +955,32 @@ export default function Dashboard() {
                             vacancy={vacancy}
                             isAdmin={userRole === 'admin'}
                             applicantCount={applicantCount}
+                            allCompanies={finalCompanyGroups
+                              .filter(g => g.company.name !== 'Overig' && g.company.name !== 'Onbekend Bedrijf')
+                              .map(g => ({ id: g.company.id, name: g.company.name }))}
+                            onCompanyAssign={async (jobId: number, companyName: string) => {
+                              // Update the job's company assignment
+                              const response = await fetch('/api/vacancy-assign-company', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ jobId, companyName }),
+                              });
+                              if (!response.ok) {
+                                const error = await response.json();
+                                throw new Error(error.error || 'Failed to assign company');
+                              }
+                              // Refresh data - invalidate all recruiteeJobs queries
+                              queryClient.invalidateQueries({ 
+                                queryKey: ['recruiteeJobs'],
+                                exact: false // Invalidate all queries that start with 'recruiteeJobs'
+                              });
+                              
+                              // Force refetch
+                              queryClient.refetchQueries({ 
+                                queryKey: ['recruiteeJobs'],
+                                exact: false 
+                              });
+                            }}
                           />
                         );
                       })}
@@ -802,6 +1023,19 @@ export default function Dashboard() {
           onSave={() => {
             refetchCompanyHours();
           }}
+        />
+      )}
+
+      {/* Company Management Modal */}
+      {isCompanyManagementModalOpen && (
+        <CompanyManagementModal
+          isOpen={true}
+          onClose={() => setIsCompanyManagementModalOpen(false)}
+          allVacancies={vacanciesWithPriority}
+          allCompanies={finalCompanyGroups
+            .filter(g => g.company.name !== 'Overig' && g.company.name !== 'Onbekend Bedrijf')
+            .map(g => ({ id: g.company.id, name: g.company.name }))}
+          isAdmin={userRole === 'admin'}
         />
       )}
     </div>
