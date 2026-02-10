@@ -12,7 +12,7 @@ import {
   RecruiteeCandidate,
   RecruiteeCandidatesResponse
 } from '@/types/recruitee';
-import { extractCompanyFromTitle, getCompanyId, cleanCompanyName } from './company-extractor';
+import { extractCompanyFromTitle, getCompanyId, cleanCompanyName, extractCompanyFromTags } from './company-extractor';
 
 const RECRUITEE_API_KEY = process.env.RECRUITEE_API_KEY;
 const RECRUITEE_COMPANY_ID = process.env.RECRUITEE_COMPANY_ID;
@@ -105,52 +105,49 @@ export async function fetchRecruiteeJobs(
                        job.department?.company_id ||
                        parseInt(RECRUITEE_COMPANY_ID!); // Fallback naar de company ID uit de URL
       
-      // NIEUW: Probeer eerst company naam uit tags te halen
-      // Tags kunnen bedrijfsnamen bevatten
-      let companyNameFromTags: string | null = null;
-      const tags = job.tags || job.tag_names || job.labels || job.label_names || [];
+      // NIEUWE LOGICA: Tags zijn nu de primaire bron voor bedrijfsidentificatie
+      // EERST: Probeer bedrijfsnaam uit tags te halen (PRIMAIRE BRON)
+      const companyNameFromTags = extractCompanyFromTags(job);
       
-      if (Array.isArray(tags) && tags.length > 0) {
-        // Zoek naar tags die op bedrijfsnamen lijken
-        // Tags kunnen strings zijn of objecten met name/id
-        const tagNames = tags.map((tag: any) => {
-          if (typeof tag === 'string') return tag;
-          if (tag.name) return tag.name;
-          if (tag.label) return tag.label;
-          return null;
-        }).filter(Boolean);
-        
-        // Gebruik de eerste tag als potentiële bedrijfsnaam
-        // (Dit is een test - we moeten zien welke tags er zijn)
-        if (tagNames.length > 0) {
-          companyNameFromTags = cleanCompanyName(tagNames[0]);
+      // TWEEDE: Als geen tags, probeer uit titel (fallback)
+      let companyNameFromTitle: string | null = null;
+      if (!companyNameFromTags) {
+        companyNameFromTitle = extractCompanyFromTitle(job.title || '');
+        if (companyNameFromTitle !== 'Onbekend Bedrijf') {
+          companyNameFromTitle = cleanCompanyName(companyNameFromTitle);
+        } else {
+          companyNameFromTitle = null;
         }
       }
       
-      // Probeer company naam uit verschillende velden
-      // EERST proberen uit tags (nieuw), DAN uit titel (klantbedrijf)
-      let companyNameFromTitle = extractCompanyFromTitle(job.title || '');
+      // DERDE: Fallback naar andere velden
+      const companyName = companyNameFromTags || 
+                         companyNameFromTitle ||
+                         cleanCompanyName(
+                           job.company?.name ||
+                           job.company_name || 
+                           job.companyName ||
+                           job.department?.company?.name ||
+                           'Onbekend Bedrijf'
+                         );
       
-      // Clean the extracted company name to remove unwanted suffixes
-      if (companyNameFromTitle !== 'Onbekend Bedrijf') {
-        companyNameFromTitle = cleanCompanyName(companyNameFromTitle);
+      // Log voor debugging (alleen eerste paar jobs)
+      if (jobs.indexOf(job) < 3) {
+        const tags = job.tags || job.tag_names || job.labels || job.label_names || [];
+        console.log(`[TAGS] Job "${job.title}":`, {
+          tags: tags,
+          companyNameFromTags: companyNameFromTags,
+          companyNameFromTitle: companyNameFromTitle,
+          finalCompanyName: companyName,
+          source: companyNameFromTags ? 'tags' : companyNameFromTitle ? 'title' : 'other'
+        });
       }
-      
-      // Prioriteit: Tags > Title > Other fields
-      const companyName = companyNameFromTags && companyNameFromTags !== 'Onbekend Bedrijf'
-        ? companyNameFromTags
-        : companyNameFromTitle !== 'Onbekend Bedrijf' 
-        ? companyNameFromTitle
-        : cleanCompanyName(
-            job.company?.name ||
-            job.company_name || 
-            job.companyName ||
-            job.department?.company?.name ||
-            'Onbekend Bedrijf'
-          );
       
       // Gebruik een string ID voor de company (op basis van naam) voor groepering
       const companyStringId = getCompanyId(companyName);
+      
+      // Behoud tags voor debugging/testing
+      const tags = job.tags || job.tag_names || job.labels || job.label_names || [];
       
       return {
         ...job,
@@ -159,7 +156,7 @@ export async function fetchRecruiteeJobs(
         company_string_id: companyStringId,
         // Behoud tags voor debugging/testing
         _tags: tags,
-        _companyNameSource: companyNameFromTags ? 'tags' : companyNameFromTitle !== 'Onbekend Bedrijf' ? 'title' : 'other',
+        _companyNameSource: companyNameFromTags ? 'tags' : companyNameFromTitle ? 'title' : 'other',
         company: {
           id: companyId,
           name: companyName,

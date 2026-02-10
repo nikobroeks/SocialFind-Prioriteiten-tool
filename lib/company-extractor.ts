@@ -1,6 +1,49 @@
 /**
  * Utility functies om klantbedrijf namen uit vacature titels te halen
+ * 
+ * NIEUWE LOGICA: Tags zijn nu de primaire bron voor bedrijfsidentificatie
  */
+
+/**
+ * Haalt bedrijfsnaam op uit tags (PRIMAIRE BRON)
+ * Tags hebben prioriteit boven titel extractie
+ */
+export function extractCompanyFromTags(job: any): string | null {
+  if (!job) return null;
+  
+  // Check verschillende mogelijke tag velden
+  const tags = job.tags || job.tag_names || job.labels || job.label_names || [];
+  
+  if (!Array.isArray(tags) || tags.length === 0) {
+    return null;
+  }
+  
+  // Extract tag namen (kan strings zijn of objecten)
+  const tagNames = tags
+    .map((tag: any) => {
+      if (typeof tag === 'string') return tag.trim();
+      if (tag && typeof tag === 'object') {
+        return tag.name || tag.label || tag.title || null;
+      }
+      return null;
+    })
+    .filter((name): name is string => Boolean(name) && name.length > 0);
+  
+  if (tagNames.length === 0) {
+    return null;
+  }
+  
+  // Gebruik de eerste tag als bedrijfsnaam
+  // (In de toekomst kunnen we slimmere logica toevoegen om de juiste tag te kiezen)
+  const companyName = cleanCompanyName(tagNames[0]);
+  
+  // Valideer dat het een redelijke bedrijfsnaam is (niet te kort, niet te lang)
+  if (companyName.length >= 2 && companyName.length < 100) {
+    return companyName;
+  }
+  
+  return null;
+}
 
 /**
  * Lijst van bekende bedrijfsnamen (whitelist)
