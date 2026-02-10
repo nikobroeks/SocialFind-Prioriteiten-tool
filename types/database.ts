@@ -49,6 +49,24 @@ export interface UserRoleRow {
   updated_at: string;
 }
 
+export interface CompanyVisibility {
+  id: string;
+  recruitee_company_id: number;
+  company_name: string;
+  is_visible: boolean;
+  created_at: string;
+  updated_at: string;
+  updated_by: string | null;
+}
+
+export interface KnownCompany {
+  id: string;
+  company_name: string;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -61,6 +79,16 @@ export interface Database {
         Row: UserRoleRow;
         Insert: Omit<UserRoleRow, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<UserRoleRow, 'id' | 'created_at' | 'updated_at'>>;
+      };
+      company_visibility: {
+        Row: CompanyVisibility;
+        Insert: Omit<CompanyVisibility, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<CompanyVisibility, 'id' | 'created_at'>>;
+      };
+      known_companies: {
+        Row: KnownCompany;
+        Insert: Omit<KnownCompany, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<KnownCompany, 'id' | 'created_at'>>;
       };
     };
   };

@@ -34,8 +34,8 @@ export async function addKnownCompany(companyName: string): Promise<KnownCompany
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
 
-  const { data, error } = await supabase
-    .from('known_companies')
+  const { data, error } = await (supabase
+    .from('known_companies') as any)
     .insert({
       company_name: companyName.trim(),
       created_by: user?.id,

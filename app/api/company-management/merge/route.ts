@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
+import type { Database } from '@/types/database';
 
 /**
  * Merge een bedrijf met een ander bedrijf
@@ -42,8 +43,8 @@ export async function POST(request: Request) {
     }
 
     // Update company_visibility records
-    const { error: visibilityError } = await supabase
-      .from('company_visibility')
+    const { error: visibilityError } = await (supabase
+      .from('company_visibility') as any)
       .update({
         company_name: targetCompanyName,
         recruitee_company_id: sourceCompanyId, // Keep the source ID or update to target ID if needed
