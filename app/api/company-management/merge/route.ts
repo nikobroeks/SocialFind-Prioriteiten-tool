@@ -41,30 +41,6 @@ export async function POST(request: Request) {
       );
     }
 
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    // Check admin role using server-side client
-    const { data: roleData, error: roleError } = await supabase
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', user.id)
-      .maybeSingle();
-
-    if (roleError || !roleData || roleData.role !== 'admin') {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 403 }
-      );
-    }
-
     // Update company_visibility records
     const { error: visibilityError } = await supabase
       .from('company_visibility')
