@@ -7,12 +7,55 @@
 /**
  * Haalt bedrijfsnaam op uit tags (PRIMAIRE BRON)
  * Tags hebben prioriteit boven titel extractie
+ * Checkt alle mogelijke tag velden en formats
  */
 export function extractCompanyFromTags(job: any): string | null {
   if (!job) return null;
   
-  // Check verschillende mogelijke tag velden
-  const tags = job.tags || job.tag_names || job.labels || job.label_names || [];
+  // Check verschillende mogelijke tag velden (in volgorde van waarschijnlijkheid)
+  let tags: any[] = [];
+  
+  // 1. Direct tags array (kan strings of objecten zijn)
+  if (job.tags && Array.isArray(job.tags)) {
+    tags = job.tags;
+  }
+  // 2. tag_names array (strings)
+  else if (job.tag_names && Array.isArray(job.tag_names)) {
+    tags = job.tag_names.map((name: string) => ({ name }));
+  }
+  // 3. labels array
+  else if (job.labels && Array.isArray(job.labels)) {
+    tags = job.labels;
+  }
+  // 4. label_names array
+  else if (job.label_names && Array.isArray(job.label_names)) {
+    tags = job.label_names.map((name: string) => ({ name }));
+  }
+  // 5. Check _rawTags (van onze enriched job)
+  else if (job._rawTags && Array.isArray(job._rawTags)) {
+    tags = job._rawTags;
+  }
+  // 6. Check custom_fields voor tags
+  else if (job.custom_fields && typeof job.custom_fields === 'object') {
+    const customFields = job.custom_fields;
+    // Zoek naar tag-gerelateerde custom fields
+    Object.keys(customFields).forEach(key => {
+      if (key.toLowerCase().includes('tag') || key.toLowerCase().includes('label')) {
+        const value = customFields[key];
+        if (Array.isArray(value)) {
+          tags = value;
+        } else if (typeof value === 'string') {
+          tags = [{ name: value }];
+        }
+      }
+    });
+  }
+  // 7. Check metadata
+  else if (job.metadata && typeof job.metadata === 'object') {
+    if (job.metadata.tags && Array.isArray(job.metadata.tags)) {
+      tags = job.metadata.tags;
+    }
+  }
   
   if (!Array.isArray(tags) || tags.length === 0) {
     return null;
@@ -23,7 +66,7 @@ export function extractCompanyFromTags(job: any): string | null {
     .map((tag: any) => {
       if (typeof tag === 'string') return tag.trim();
       if (tag && typeof tag === 'object') {
-        return tag.name || tag.label || tag.title || null;
+        return tag.name || tag.label || tag.title || tag.value || null;
       }
       return null;
     })
