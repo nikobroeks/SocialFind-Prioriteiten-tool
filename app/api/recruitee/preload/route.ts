@@ -50,7 +50,7 @@ export async function POST(request: Request) {
     const { hires, applications, stats } = await fetchAllCandidatesAndApplications();
     console.log('[PRELOAD] Fetched', hires.length, 'hires and', applications.length, 'applications');
 
-    // Store in cache table
+    // Store in cache table - UPSERT vervangt bestaande data (geen extra opslag)
     const cacheData = {
       user_id: user.id,
       jobs: JSON.stringify(jobs),
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
       cached_at: new Date().toISOString(),
     };
 
-    // Upsert cache (replace existing cache for this user)
+    // UPSERT cache - vervangt bestaande cache voor deze user (geen duplicaten)
     const { error: cacheError } = await supabase
       .from('recruitee_cache')
       .upsert(cacheData as any, {
@@ -103,10 +103,10 @@ export async function GET(request: Request) {
       );
     }
 
-    // Get cached data
+    // Get cached data - SELECT alleen benodigde kolommen
     const { data: cache, error: cacheError } = await supabase
       .from('recruitee_cache')
-      .select('*')
+      .select('jobs,hires,applications,cached_at')
       .eq('user_id', user.id)
       .single();
 

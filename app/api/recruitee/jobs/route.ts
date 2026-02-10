@@ -19,9 +19,10 @@ export async function GET(request: Request) {
       const { data: { user } } = await supabase.auth.getUser();
 
       if (user) {
+        // SELECT alleen de jobs kolom - niet alle kolommen!
         const { data: cache } = await supabase
           .from('recruitee_cache')
-          .select('*')
+          .select('jobs')
           .eq('user_id', user.id)
           .single();
 

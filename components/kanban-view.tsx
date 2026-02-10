@@ -2,7 +2,7 @@
 
 import { VacancyWithPriority } from '@/types/dashboard';
 import { PriorityBadge } from './priority-badge';
-import { Edit2, Search, Inbox } from 'lucide-react';
+import { Edit2, Search, Inbox, Users } from 'lucide-react';
 import { useState } from 'react';
 import { PriorityModal } from './priority-modal';
 import { PriorityColor } from '@/types/dashboard';
@@ -11,9 +11,10 @@ interface KanbanViewProps {
   vacancies: VacancyWithPriority[];
   isAdmin: boolean;
   searchQuery?: string;
+  applicantsPerVacancy?: Record<string, number>;
 }
 
-export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewProps) {
+export function KanbanView({ vacancies, isAdmin, searchQuery = '', applicantsPerVacancy = {} }: KanbanViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithPriority | null>(null);
 
@@ -80,14 +81,24 @@ export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewP
                     </p>
                   </div>
                 ) : (
-                  columnVacancies.map((vacancy) => (
+                  columnVacancies.map((vacancy) => {
+                    const applicantCount = applicantsPerVacancy[vacancy.job.id.toString()] || 0;
+                    return (
                     <div
                       key={vacancy.job.id}
                       className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm hover:shadow-md transition-shadow"
                     >
-                      <h3 className="font-semibold text-gray-900 text-sm mb-2 line-clamp-2">
-                        {vacancy.job.title}
-                      </h3>
+                      <div className="flex items-start justify-between gap-2 mb-2">
+                        <h3 className="font-semibold text-gray-900 text-sm line-clamp-2 flex-1">
+                          {vacancy.job.title}
+                        </h3>
+                        {applicantCount > 0 && (
+                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded-full flex-shrink-0">
+                            <Users className="h-3 w-3 text-blue-600" />
+                            <span className="text-xs font-semibold text-blue-700">{applicantCount}</span>
+                          </div>
+                        )}
+                      </div>
                       
                       <div className="space-y-2 text-xs text-gray-600 mb-3">
                         <div className="flex items-center justify-between">
@@ -126,7 +137,8 @@ export function KanbanView({ vacancies, isAdmin, searchQuery = '' }: KanbanViewP
                         </button>
                       )}
                     </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

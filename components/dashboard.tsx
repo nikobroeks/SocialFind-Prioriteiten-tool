@@ -14,8 +14,9 @@ import { KanbanView } from './kanban-view';
 import { CompactView } from './compact-view';
 import { useState, useEffect, useCallback } from 'react';
 import { getUserRole } from '@/lib/supabase/queries';
-import { Building2, TrendingUp, AlertCircle, Users, EyeOff, Search } from 'lucide-react';
+import { Building2, TrendingUp, AlertCircle, Users, EyeOff, Search, Settings } from 'lucide-react';
 import { CompanyVisibilityToggle } from './company-visibility-toggle';
+import { CompanyVisibilityModal } from './company-visibility-modal';
 import { SearchBar } from './search-bar';
 import { ExportButton } from './export-button';
 import { DashboardAnalytics } from './dashboard-analytics';
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const [userRole, setUserRole] = useState<'admin' | 'viewer' | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
+  const [isCompanyVisibilityModalOpen, setIsCompanyVisibilityModalOpen] = useState(false);
   const { addNotification } = useNotifications();
 
   const handleSearch = useCallback((query: string) => {
@@ -77,6 +79,23 @@ export default function Dashboard() {
     retry: 1,
   });
 
+  // Fetch applicants per vacancy - heavily cached
+  const { data: vacancyApplicantsData, isLoading: vacancyApplicantsLoading } = useQuery({
+    queryKey: ['vacancy-applicants'],
+    queryFn: async () => {
+      const response = await fetch('/api/recruitee/vacancy-applicants');
+      if (!response.ok) throw new Error('Failed to fetch vacancy applicants');
+      return response.json();
+    },
+    staleTime: 20 * 60 * 1000, // 20 minutes
+    gcTime: 60 * 60 * 1000, // 1 hour cache
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+    refetchOnReconnect: false,
+    refetchInterval: false,
+    retry: 1,
+  });
+
   // Fetch job visibility settings
   const { data: visibilityData, isLoading: visibilityLoading } = useQuery({
     queryKey: ['job-visibility'],
@@ -90,9 +109,24 @@ export default function Dashboard() {
     refetchOnMount: false,
   });
 
+  // Fetch company visibility settings
+  const { data: companyVisibilityData, isLoading: companyVisibilityLoading } = useQuery({
+    queryKey: ['company-visibility'],
+    queryFn: async () => {
+      const response = await fetch('/api/company-visibility');
+      if (!response.ok) throw new Error('Failed to fetch company visibility');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
   const visibility = visibilityData?.visibility || [];
+  const companyVisibility = companyVisibilityData?.visibility || [];
 
   const companyHires = companyHiresData?.companyHires || {};
+  const applicantsPerVacancy = vacancyApplicantsData?.applicantsPerVacancy || {};
   
   // Helper function to normalize company names for matching
   const normalizeCompanyName = (name: string): string => {
@@ -271,8 +305,22 @@ export default function Dashboard() {
   // Convert to array - ALL companies are included, even if they have no visible vacancies
   const companyGroups: CompanyGroup[] = Object.values(allCompaniesMap);
 
+  // Helper to check if company is visible
+  const isCompanyVisible = (companyId: number, companyName: string): boolean => {
+    const companyVis = companyVisibility.find(
+      (v: any) => v.recruitee_company_id === companyId && v.company_name === companyName
+    );
+    // Default to visible if no setting exists
+    return companyVis ? companyVis.is_visible : true;
+  };
+
+  // Filter companies based on visibility
+  const visibleCompanyGroups = companyGroups.filter(group => 
+    isCompanyVisible(group.company.id, group.company.name)
+  );
+
   // Bereken company priority: hoogste priority van alle vacatures binnen dat bedrijf
-  const companyGroupsWithPriority = companyGroups.map(group => {
+  const companyGroupsWithPriority = visibleCompanyGroups.map(group => {
     const priorities = group.vacancies.map(v => {
       const priorityValue = v.displayPriority === 'Red' ? 3 : 
                            v.displayPriority === 'Orange' ? 2 : 1;
@@ -328,18 +376,23 @@ export default function Dashboard() {
       })
     : companyGroupsWithPriority;
 
+  // Filter vacancies based on company visibility
+  const vacanciesWithCompanyVisibility = vacanciesWithPriority.filter(vacancy => 
+    isCompanyVisible(vacancy.company.id, vacancy.company.name)
+  );
+
   // Filter vacatures voor kanban view
   const filteredVacancies = searchQuery.trim()
-    ? vacanciesWithPriority.filter((vacancy) => {
+    ? vacanciesWithCompanyVisibility.filter((vacancy) => {
         const query = searchQuery.toLowerCase().trim();
         return (
           vacancy.job.title.toLowerCase().includes(query) ||
           vacancy.company.name.toLowerCase().includes(query)
         );
       })
-    : vacanciesWithPriority;
+    : vacanciesWithCompanyVisibility;
 
-  const isLoading = jobsLoading || prioritiesLoading || companyHiresLoading || visibilityLoading;
+  const isLoading = jobsLoading || prioritiesLoading || companyHiresLoading || visibilityLoading || vacancyApplicantsLoading || companyVisibilityLoading;
 
   if (isLoading) {
     return (
@@ -415,6 +468,16 @@ export default function Dashboard() {
               <SearchBar onSearch={handleSearch} />
             </div>
             <div className="flex items-center gap-3 sm:gap-4 flex-shrink-0">
+              {userRole === 'admin' && (
+                <button
+                  onClick={() => setIsCompanyVisibilityModalOpen(true)}
+                  className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-md transition-colors border bg-white text-gray-600 border-gray-300 hover:bg-gray-50"
+                  title="Bedrijf zichtbaarheid beheren"
+                >
+                  <Settings className="h-4 w-4" />
+                  <span className="hidden sm:inline">Bedrijf zichtbaarheid</span>
+                </button>
+              )}
               <ExportButton
                 vacancies={filteredVacancies}
                 companyGroups={filteredCompanyGroups}
@@ -460,6 +523,7 @@ export default function Dashboard() {
               vacancies={filteredVacancies} 
               isAdmin={userRole === 'admin'}
               searchQuery={searchQuery}
+              applicantsPerVacancy={applicantsPerVacancy}
             />
           ) : viewMode === 'compact' ? (
             // Compact View - Company groups in compact format
@@ -468,6 +532,7 @@ export default function Dashboard() {
               isAdmin={userRole === 'admin'}
               companyHires={companyHires}
               searchQuery={searchQuery}
+              applicantsPerVacancy={applicantsPerVacancy}
             />
           ) : (
             // Table View - Original table view per company
@@ -585,39 +650,45 @@ export default function Dashboard() {
               </div>
 
               {/* Table */}
-              <div className="overflow-x-auto">
+              <div>
                 {group.vacancies.length > 0 ? (
-                  <table className="w-full border-collapse" role="table" aria-label={`Vacatures voor ${group.company.name}`}>
+                  <table className="w-full border-collapse table-fixed" role="table" aria-label={`Vacatures voor ${group.company.name}`}>
                     <colgroup>
-                      <col className="w-[25%]" />
+                      <col className="w-[20%]" />
+                      <col className="w-[9%]" />
                       <col className="w-[12%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[12%]" />
-                      <col className="w-[10%]" />
-                      {userRole === 'admin' && <col className="w-[12%]" />}
+                      <col className="w-[11%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[11%]" />
+                      <col className="w-[8%]" />
+                      {userRole === 'admin' && <col className="w-[10%]" />}
                     </colgroup>
                     <thead className="hidden sm:table-header-group">
                       <tr className="bg-gray-50 border-b border-gray-200">
-                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Vacature</th>
-                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Klant pijn</th>
-                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Tijdkritiek</th>
-                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Strategie</th>
-                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Account</th>
-                        <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Prioriteit</th>
+                        <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Vacature</th>
+                        <th scope="col" className="text-center p-2 pr-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">Sollicitanten</th>
+                        <th scope="col" className="text-left p-2 pl-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">Klant pijn</th>
+                        <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Tijdkritiek</th>
+                        <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Strategie</th>
+                        <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Account</th>
+                        <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Prioriteit</th>
                         {userRole === 'admin' && (
-                          <th scope="col" className="text-left p-3 text-xs font-semibold text-gray-700 uppercase tracking-wider">Acties</th>
+                          <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Acties</th>
                         )}
                       </tr>
                     </thead>
                     <tbody>
-                      {group.vacancies.map((vacancy) => (
-                        <VacancyRow
-                          key={vacancy.job.id}
-                          vacancy={vacancy}
-                          isAdmin={userRole === 'admin'}
-                        />
-                      ))}
+                      {group.vacancies.map((vacancy) => {
+                        const applicantCount = applicantsPerVacancy[vacancy.job.id.toString()] || 0;
+                        return (
+                          <VacancyRow
+                            key={vacancy.job.id}
+                            vacancy={vacancy}
+                            isAdmin={userRole === 'admin'}
+                            applicantCount={applicantCount}
+                          />
+                        );
+                      })}
                     </tbody>
                   </table>
                 ) : (
@@ -638,6 +709,14 @@ export default function Dashboard() {
           )}
         </div>
       </main>
+
+      {/* Company Visibility Modal */}
+      <CompanyVisibilityModal
+        companies={companyGroups.map(g => g.company)}
+        isAdmin={userRole === 'admin'}
+        isOpen={isCompanyVisibilityModalOpen}
+        onClose={() => setIsCompanyVisibilityModalOpen(false)}
+      />
     </div>
   );
 }

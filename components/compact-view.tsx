@@ -11,9 +11,10 @@ interface CompactViewProps {
   isAdmin: boolean;
   companyHires?: Record<string, number>;
   searchQuery?: string;
+  applicantsPerVacancy?: Record<string, number>;
 }
 
-export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQuery = '' }: CompactViewProps) {
+export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQuery = '', applicantsPerVacancy = {} }: CompactViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithPriority | null>(null);
 
@@ -118,17 +119,26 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                   </p>
                 </div>
               ) : (
-                group.vacancies.map((vacancy) => (
+                group.vacancies.map((vacancy) => {
+                  const applicantCount = applicantsPerVacancy[vacancy.job.id.toString()] || 0;
+                  return (
                 <div
                   key={vacancy.job.id}
                   className="px-4 py-3 hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-1">
+                      <div className="flex items-center gap-3 mb-1 flex-wrap">
                         <h4 className="font-medium text-gray-900 text-sm truncate">
                           {vacancy.job.title}
                         </h4>
+                        {applicantCount > 0 && (
+                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded-full">
+                            <Users className="h-3 w-3 text-blue-600" />
+                            <span className="text-xs font-semibold text-blue-700">{applicantCount}</span>
+                            <span className="text-xs text-blue-600">sollicitanten</span>
+                          </div>
+                        )}
                         <PriorityBadge priority={vacancy.displayPriority} />
                       </div>
                       <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
@@ -161,7 +171,8 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                     )}
                   </div>
                 </div>
-                ))
+                );
+                })
               )}
             </div>
           </div>

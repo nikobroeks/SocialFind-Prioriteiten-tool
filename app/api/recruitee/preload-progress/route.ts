@@ -26,30 +26,15 @@ export async function POST(request: Request) {
       console.log('[PRELOAD PROGRESS] Step 1/4: Fetching jobs...');
       const jobs = await fetchRecruiteeJobs({ status: 'published' });
       
-      // Store jobs in cache immediately (partial update)
-      const { data: existingCache } = await supabase
-        .from('recruitee_cache')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (existingCache) {
-        await (supabase.from('recruitee_cache') as any)
-          .update({
-            jobs: JSON.stringify(jobs),
-            cached_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
-      } else {
-        await (supabase.from('recruitee_cache') as any)
-          .insert({
-            user_id: user.id,
-            jobs: JSON.stringify(jobs),
-            hires: JSON.stringify([]),
-            applications: JSON.stringify([]),
-            cached_at: new Date().toISOString(),
-          });
-      }
+      // UPSERT jobs in cache - geen SELECT nodig!
+      await (supabase.from('recruitee_cache') as any)
+        .upsert({
+          user_id: user.id,
+          jobs: JSON.stringify(jobs),
+          cached_at: new Date().toISOString(),
+        } as any, {
+          onConflict: 'user_id',
+        });
 
       return NextResponse.json({
         step: 1,
@@ -64,21 +49,15 @@ export async function POST(request: Request) {
       console.log('[PRELOAD PROGRESS] Step 2/4: Fetching applications...');
       const { applications } = await fetchAllCandidatesAndApplications();
       
-      // Update cache with applications
-      const { data: existingCache } = await supabase
-        .from('recruitee_cache')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (existingCache) {
-        await (supabase.from('recruitee_cache') as any)
-          .update({
-            applications: JSON.stringify(applications),
-            cached_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
-      }
+      // UPSERT applications in cache - geen SELECT nodig!
+      await (supabase.from('recruitee_cache') as any)
+        .upsert({
+          user_id: user.id,
+          applications: JSON.stringify(applications),
+          cached_at: new Date().toISOString(),
+        } as any, {
+          onConflict: 'user_id',
+        });
 
       return NextResponse.json({
         step: 2,
@@ -93,22 +72,16 @@ export async function POST(request: Request) {
       console.log('[PRELOAD PROGRESS] Step 3/4: Fetching hires...');
       const { hires, stats } = await fetchAllCandidatesAndApplications();
       
-      // Update cache with hires
-      const { data: existingCache } = await supabase
-        .from('recruitee_cache')
-        .select('*')
-        .eq('user_id', user.id)
-        .single();
-
-      if (existingCache) {
-        await (supabase.from('recruitee_cache') as any)
-          .update({
-            hires: JSON.stringify(hires),
-            stats: JSON.stringify(stats),
-            cached_at: new Date().toISOString(),
-          })
-          .eq('user_id', user.id);
-      }
+      // UPSERT hires in cache - geen SELECT nodig!
+      await (supabase.from('recruitee_cache') as any)
+        .upsert({
+          user_id: user.id,
+          hires: JSON.stringify(hires),
+          stats: JSON.stringify(stats),
+          cached_at: new Date().toISOString(),
+        } as any, {
+          onConflict: 'user_id',
+        });
 
       return NextResponse.json({
         step: 3,
@@ -122,10 +95,10 @@ export async function POST(request: Request) {
     if (step === 4) {
       console.log('[PRELOAD PROGRESS] Step 4/4: Finalizing...');
       
-      // Get final cache to verify
+      // Get final cache to verify - SELECT alleen benodigde kolommen
       const { data: cache } = await supabase
         .from('recruitee_cache')
-        .select('*')
+        .select('jobs,hires,applications,cached_at')
         .eq('user_id', user.id)
         .single();
 

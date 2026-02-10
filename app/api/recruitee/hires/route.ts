@@ -40,9 +40,13 @@ export async function GET(request: Request) {
     // Filters worden client-side toegepast op de gecachte data
     // Data flow: API → Database → Frontend (geen directe API calls naar Recruitee)
     if (useCache && user) {
+      // SELECT alleen de kolommen die we nodig hebben - niet alle kolommen!
+      const columnsToSelect = includeApplications 
+        ? 'hires,applications,stats' 
+        : 'hires';
       const { data: cache } = await supabase
         .from('recruitee_cache')
-        .select('*')
+        .select(columnsToSelect)
         .eq('user_id', user.id)
         .single();
 

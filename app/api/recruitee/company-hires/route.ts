@@ -22,9 +22,10 @@ export async function GET(request: Request) {
     let hires: any[] = [];
 
     if (user) {
+      // SELECT alleen de hires kolom - niet alle kolommen!
       const { data: cache } = await supabase
         .from('recruitee_cache')
-        .select('*')
+        .select('hires')
         .eq('user_id', user.id)
         .single();
 
