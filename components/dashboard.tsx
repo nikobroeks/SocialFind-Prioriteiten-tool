@@ -14,9 +14,10 @@ import { KanbanView } from './kanban-view';
 import { CompactView } from './compact-view';
 import { useState, useEffect, useCallback } from 'react';
 import { getUserRole } from '@/lib/supabase/queries';
-import { Building2, TrendingUp, AlertCircle, Users, EyeOff, Search, Settings } from 'lucide-react';
+import { Building2, TrendingUp, AlertCircle, Users, EyeOff, Search, Settings, Clock, Edit2 } from 'lucide-react';
 import { CompanyVisibilityToggle } from './company-visibility-toggle';
 import { CompanyVisibilityModal } from './company-visibility-modal';
+import { CompanyHoursModal } from './company-hours-modal';
 import { SearchBar } from './search-bar';
 import { ExportButton } from './export-button';
 import { DashboardAnalytics } from './dashboard-analytics';
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCompanyVisibilityModalOpen, setIsCompanyVisibilityModalOpen] = useState(false);
+  const [companyHoursModal, setCompanyHoursModal] = useState<{ companyId: number; companyName: string } | null>(null);
   const { addNotification } = useNotifications();
 
   const handleSearch = useCallback((query: string) => {
@@ -125,8 +127,22 @@ export default function Dashboard() {
   const visibility = visibilityData?.visibility || [];
   const companyVisibility = companyVisibilityData?.visibility || [];
 
+  // Fetch company hours
+  const { data: companyHoursData, isLoading: companyHoursLoading, refetch: refetchCompanyHours } = useQuery({
+    queryKey: ['company-hours'],
+    queryFn: async () => {
+      const response = await fetch('/api/company-hours');
+      if (!response.ok) throw new Error('Failed to fetch company hours');
+      return response.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    refetchOnMount: false,
+  });
+
   const companyHires = companyHiresData?.companyHires || {};
   const applicantsPerVacancy = vacancyApplicantsData?.applicantsPerVacancy || {};
+  const companyHours = companyHoursData?.hours || [];
   
   // Helper function to normalize company names for matching
   const normalizeCompanyName = (name: string): string => {
@@ -150,6 +166,13 @@ export default function Dashboard() {
     companyHiresMap.set(name, count as number); // Also keep original for exact match
   });
   
+  // Helper function to get company hours
+  const getCompanyHours = (companyId: number, companyName: string) => {
+    return companyHours.find(
+      (h: any) => h.recruitee_company_id === companyId && h.company_name === companyName
+    );
+  };
+
   // Helper to find hires count for a company (with fuzzy matching)
   const getCompanyHires = (companyName: string): number => {
     const normalized = normalizeCompanyName(companyName);
@@ -392,7 +415,7 @@ export default function Dashboard() {
       })
     : vacanciesWithCompanyVisibility;
 
-  const isLoading = jobsLoading || prioritiesLoading || companyHiresLoading || visibilityLoading || vacancyApplicantsLoading || companyVisibilityLoading;
+  const isLoading = jobsLoading || prioritiesLoading || companyHiresLoading || visibilityLoading || vacancyApplicantsLoading || companyVisibilityLoading || companyHoursLoading;
 
   if (isLoading) {
     return (
@@ -556,23 +579,64 @@ export default function Dashboard() {
                       <Building2 className="h-5 w-5 text-white" />
                     </div>
                     <div>
-                      <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
-                      <div className="flex items-center gap-4 mt-0.5">
-                        <p className="text-sm text-gray-500">
-                          {group.vacancies.length > 0 
-                            ? `${group.vacancies.length} vacature${group.vacancies.length !== 1 ? 's' : ''}`
-                            : 'Geen zichtbare vacatures'
-                          }
-                        </p>
+                      <div>
+                        <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
+                        <div className="flex items-center gap-3 mt-1">
+                          <p className="text-sm text-gray-500">
+                            {group.vacancies.length > 0 
+                              ? `${group.vacancies.length} vacature${group.vacancies.length !== 1 ? 's' : ''}`
+                              : 'Geen zichtbare vacatures'
+                            }
+                          </p>
+                          {(() => {
+                            const hiresCount = getCompanyHires(group.company.name);
+                            return hiresCount > 0 && (
+                              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
+                                <Users className="h-3 w-3 text-green-600" />
+                                <span className="text-xs font-semibold text-green-700">{hiresCount}</span>
+                                <span className="text-xs text-green-600">hires (90d)</span>
+                              </div>
+                            );
+                          })()}
+                        </div>
                         {(() => {
-                          const hiresCount = getCompanyHires(group.company.name);
-                          return hiresCount > 0 && (
-                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
-                              <Users className="h-3 w-3 text-green-600" />
-                              <span className="text-xs font-semibold text-green-700">{hiresCount}</span>
-                              <span className="text-xs text-green-600">hires (90d)</span>
-                            </div>
-                          );
+                          const hours = getCompanyHours(group.company.id, group.company.name);
+                          if (hours && hours.total_hours > 0) {
+                            const remaining = hours.total_hours - hours.spent_hours;
+                            const percentage = (hours.spent_hours / hours.total_hours) * 100;
+                            const progressColor = percentage > 80 ? 'bg-red-500' : 
+                                                  percentage > 50 ? 'bg-orange-500' : 
+                                                  'bg-green-500';
+                            const textColor = percentage > 80 ? 'text-red-600' : 
+                                              percentage > 50 ? 'text-orange-600' : 
+                                              'text-green-600';
+                            
+                            return (
+                              <div className="mt-3 pt-3 border-t border-gray-100">
+                                <div className="flex items-center justify-between mb-1.5">
+                                  <div className="flex items-center gap-2">
+                                    <Clock className="h-3.5 w-3.5 text-gray-400" />
+                                    <span className="text-xs text-gray-600 font-medium">
+                                      {hours.spent_hours.toFixed(1)} / {hours.total_hours.toFixed(1)} uren
+                                    </span>
+                                  </div>
+                                  <span className={`text-xs font-semibold ${textColor}`}>
+                                    {percentage.toFixed(0)}%
+                                  </span>
+                                </div>
+                                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-1">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ease-out ${progressColor}`}
+                                    style={{ width: `${Math.min(100, percentage)}%` }}
+                                  />
+                                </div>
+                                <span className="text-xs text-gray-400">
+                                  {remaining.toFixed(1)}u resterend
+                                </span>
+                              </div>
+                            );
+                          }
+                          return null;
                         })()}
                       </div>
                     </div>
@@ -644,6 +708,16 @@ export default function Dashboard() {
                         />
                       );
                     })()}
+                    {userRole === 'admin' && (
+                      <button
+                        onClick={() => setCompanyHoursModal({ companyId: group.company.id, companyName: group.company.name })}
+                        className="inline-flex items-center gap-1.5 px-2 py-1 text-xs font-medium text-gray-600 hover:text-gray-900 hover:bg-gray-50 rounded transition-colors"
+                        title="Uren beheren"
+                      >
+                        <Clock className="h-3.5 w-3.5" />
+                        <span className="hidden sm:inline">Uren</span>
+                      </button>
+                    )}
                     <PriorityBadge priority={group.companyPriority || 'Green'} />
                   </div>
                 </div>
@@ -717,6 +791,19 @@ export default function Dashboard() {
         isOpen={isCompanyVisibilityModalOpen}
         onClose={() => setIsCompanyVisibilityModalOpen(false)}
       />
+
+      {/* Company Hours Modal */}
+      {companyHoursModal && (
+        <CompanyHoursModal
+          companyId={companyHoursModal.companyId}
+          companyName={companyHoursModal.companyName}
+          isOpen={!!companyHoursModal}
+          onClose={() => setCompanyHoursModal(null)}
+          onSave={() => {
+            refetchCompanyHours();
+          }}
+        />
+      )}
     </div>
   );
 }
