@@ -90,8 +90,7 @@ export async function POST(request: Request) {
     }
 
     // Update de cache
-    const { error: updateError } = await supabase
-      .from('recruitee_cache')
+    const { error: updateError } = await (supabase.from('recruitee_cache') as any)
       .update({
         jobs: JSON.stringify(updatedJobs),
         updated_at: new Date().toISOString(),
