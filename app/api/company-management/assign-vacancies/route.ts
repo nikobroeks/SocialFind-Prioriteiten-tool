@@ -24,7 +24,7 @@ export async function POST(request: Request) {
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (userRoleError || !userRoleData || userRoleData.role !== 'admin') {
+    if (userRoleError || !userRoleData || (userRoleData as any)?.role !== 'admin') {
       return NextResponse.json(
         { error: 'Unauthorized - Admin access required' },
         { status: 403 }
