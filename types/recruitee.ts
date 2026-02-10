@@ -10,6 +10,10 @@ export interface RecruiteeJob {
   company_id: number;
   company_string_id?: string; // Voor groepering op klantbedrijf naam
   company?: RecruiteeCompany;
+  tags?: string[] | Array<{ id?: number; name?: string; label?: string }>; // Tags voor bedrijfsidentificatie
+  tag_names?: string[]; // Alternatieve tag namen
+  labels?: string[] | Array<{ id?: number; name?: string; label?: string }>; // Labels (alternatief voor tags)
+  label_names?: string[]; // Alternatieve label namen
   created_at: string;
   updated_at: string;
   // Voeg andere relevante velden toe op basis van je Recruitee API response

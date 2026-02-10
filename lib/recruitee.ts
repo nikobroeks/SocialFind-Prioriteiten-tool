@@ -105,8 +105,30 @@ export async function fetchRecruiteeJobs(
                        job.department?.company_id ||
                        parseInt(RECRUITEE_COMPANY_ID!); // Fallback naar de company ID uit de URL
       
+      // NIEUW: Probeer eerst company naam uit tags te halen
+      // Tags kunnen bedrijfsnamen bevatten
+      let companyNameFromTags: string | null = null;
+      const tags = job.tags || job.tag_names || job.labels || job.label_names || [];
+      
+      if (Array.isArray(tags) && tags.length > 0) {
+        // Zoek naar tags die op bedrijfsnamen lijken
+        // Tags kunnen strings zijn of objecten met name/id
+        const tagNames = tags.map((tag: any) => {
+          if (typeof tag === 'string') return tag;
+          if (tag.name) return tag.name;
+          if (tag.label) return tag.label;
+          return null;
+        }).filter(Boolean);
+        
+        // Gebruik de eerste tag als potentiële bedrijfsnaam
+        // (Dit is een test - we moeten zien welke tags er zijn)
+        if (tagNames.length > 0) {
+          companyNameFromTags = cleanCompanyName(tagNames[0]);
+        }
+      }
+      
       // Probeer company naam uit verschillende velden
-      // EERST proberen uit de titel te halen (klantbedrijf)
+      // EERST proberen uit tags (nieuw), DAN uit titel (klantbedrijf)
       let companyNameFromTitle = extractCompanyFromTitle(job.title || '');
       
       // Clean the extracted company name to remove unwanted suffixes
@@ -114,7 +136,10 @@ export async function fetchRecruiteeJobs(
         companyNameFromTitle = cleanCompanyName(companyNameFromTitle);
       }
       
-      const companyName = companyNameFromTitle !== 'Onbekend Bedrijf' 
+      // Prioriteit: Tags > Title > Other fields
+      const companyName = companyNameFromTags && companyNameFromTags !== 'Onbekend Bedrijf'
+        ? companyNameFromTags
+        : companyNameFromTitle !== 'Onbekend Bedrijf' 
         ? companyNameFromTitle
         : cleanCompanyName(
             job.company?.name ||
@@ -132,6 +157,9 @@ export async function fetchRecruiteeJobs(
         company_id: companyId,
         // Gebruik de string ID als unieke identifier voor groepering
         company_string_id: companyStringId,
+        // Behoud tags voor debugging/testing
+        _tags: tags,
+        _companyNameSource: companyNameFromTags ? 'tags' : companyNameFromTitle !== 'Onbekend Bedrijf' ? 'title' : 'other',
         company: {
           id: companyId,
           name: companyName,
