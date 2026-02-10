@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllCompanyHours, getCompanyHours, setCompanyHours } from '@/lib/supabase/company-hours';
+import { 
+  getAllCompanyHoursForWeeks, 
+  getCompanyHoursForWeeks, 
+  setCompanyHours,
+  getWeekStartDate,
+  getPreviousWeekStartDate
+} from '@/lib/supabase/company-hours';
 
 /**
  * GET /api/company-hours
- * Get hours for all companies or a specific company
+ * Get hours for all companies or a specific company (for current and previous week)
  */
 export async function GET(request: NextRequest) {
   try {
@@ -12,13 +18,23 @@ export async function GET(request: NextRequest) {
     const companyName = searchParams.get('companyName');
 
     if (companyId && companyName) {
-      // Get hours for specific company
-      const hours = await getCompanyHours(parseInt(companyId), companyName);
-      return NextResponse.json({ hours });
+      // Get hours for specific company for both weeks
+      const hours = await getCompanyHoursForWeeks(parseInt(companyId), companyName);
+      return NextResponse.json({ 
+        hours: hours.currentWeek,
+        previousWeekHours: hours.previousWeek,
+        currentWeekStart: getWeekStartDate(),
+        previousWeekStart: getPreviousWeekStartDate()
+      });
     } else {
-      // Get hours for all companies
-      const hours = await getAllCompanyHours();
-      return NextResponse.json({ hours });
+      // Get hours for all companies for both weeks
+      const hours = await getAllCompanyHoursForWeeks();
+      return NextResponse.json({ 
+        hours: hours.currentWeek,
+        previousWeekHours: hours.previousWeek,
+        currentWeekStart: getWeekStartDate(),
+        previousWeekStart: getPreviousWeekStartDate()
+      });
     }
   } catch (error: any) {
     console.error('Error fetching company hours:', error);
@@ -31,12 +47,12 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/company-hours
- * Create or update hours for a company
+ * Create or update hours for a company for the current week
  */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { companyId, companyName, totalHours, spentHours } = body;
+    const { companyId, companyName, totalHours, spentHours, weekStartDate } = body;
 
     if (!companyId || !companyName) {
       return NextResponse.json(
@@ -59,11 +75,15 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Use provided weekStartDate or default to current week
+    const weekStart = weekStartDate || getWeekStartDate();
+
     const hours = await setCompanyHours(
       parseInt(companyId),
       companyName,
       totalHours,
-      spentHours
+      spentHours,
+      weekStart
     );
 
     return NextResponse.json({ hours });

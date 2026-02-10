@@ -67,6 +67,18 @@ export interface KnownCompany {
   created_by: string | null;
 }
 
+export interface CompanyHours {
+  id: string;
+  recruitee_company_id: number;
+  company_name: string;
+  total_hours: number;
+  spent_hours: number;
+  week_start_date: string;
+  created_at: string;
+  updated_at: string;
+  updated_by: string | null;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -89,6 +101,11 @@ export interface Database {
         Row: KnownCompany;
         Insert: Omit<KnownCompany, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<KnownCompany, 'id' | 'created_at'>>;
+      };
+      company_hours: {
+        Row: CompanyHours;
+        Insert: Omit<CompanyHours, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<CompanyHours, 'id' | 'created_at'>>;
       };
     };
   };

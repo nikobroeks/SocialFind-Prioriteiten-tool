@@ -148,6 +148,7 @@ export default function Dashboard() {
   const companyHires = companyHiresData?.companyHires || {};
   const applicantsPerVacancy = vacancyApplicantsData?.applicantsPerVacancy || {};
   const companyHours = companyHoursData?.hours || [];
+  const previousWeekHours = companyHoursData?.previousWeekHours || [];
 
   // Fetch known companies from database
   const { data: knownCompaniesData } = useQuery({
@@ -186,9 +187,16 @@ export default function Dashboard() {
     companyHiresMap.set(name, count as number); // Also keep original for exact match
   });
   
-  // Helper function to get company hours
+  // Helper function to get company hours for current week
   const getCompanyHours = (companyId: number, companyName: string) => {
     return companyHours.find(
+      (h: any) => h.recruitee_company_id === companyId && h.company_name === companyName
+    );
+  };
+
+  // Helper function to get company hours for previous week
+  const getPreviousWeekHours = (companyId: number, companyName: string) => {
+    return previousWeekHours.find(
       (h: any) => h.recruitee_company_id === companyId && h.company_name === companyName
     );
   };
@@ -769,70 +777,29 @@ export default function Dashboard() {
               {/* Company Header */}
               <div className="bg-gradient-to-r from-gray-50 to-white px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm">
+                  <div className="flex items-center gap-3 flex-1">
+                    <div className="h-10 w-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
                       <Building2 className="h-5 w-5 text-white" />
                     </div>
-                    <div>
-                      <div>
-                        <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
-                        <div className="flex items-center gap-3 mt-1">
-                          <p className="text-sm text-gray-500">
-                            {group.vacancies.length > 0 
-                              ? `${group.vacancies.length} vacature${group.vacancies.length !== 1 ? 's' : ''}`
-                              : 'Geen zichtbare vacatures'
-                            }
-                          </p>
-                          {(() => {
-                            const hiresCount = getCompanyHires(group.company.name);
-                            return hiresCount > 0 && (
-                              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
-                                <Users className="h-3 w-3 text-green-600" />
-                                <span className="text-xs font-semibold text-green-700">{hiresCount}</span>
-                                <span className="text-xs text-green-600">hires (90d)</span>
-                              </div>
-                            );
-                          })()}
-                        </div>
-                        {(() => {
-                          const hours = getCompanyHours(group.company.id, group.company.name);
-                          if (hours && hours.total_hours > 0) {
-                            const remaining = hours.total_hours - hours.spent_hours;
-                            const percentage = (hours.spent_hours / hours.total_hours) * 100;
-                            const progressColor = percentage > 80 ? 'bg-red-500' : 
-                                                  percentage > 50 ? 'bg-orange-500' : 
-                                                  'bg-green-500';
-                            const textColor = percentage > 80 ? 'text-red-600' : 
-                                              percentage > 50 ? 'text-orange-600' : 
-                                              'text-green-600';
-                            
-                            return (
-                              <div className="mt-3 pt-3 border-t border-gray-100">
-                                <div className="flex items-center justify-between mb-1.5">
-                                  <div className="flex items-center gap-2">
-                                    <Clock className="h-3.5 w-3.5 text-gray-400" />
-                                    <span className="text-xs text-gray-600 font-medium">
-                                      {hours.spent_hours.toFixed(1)} / {hours.total_hours.toFixed(1)} uren
-                                    </span>
-                                  </div>
-                                  <span className={`text-xs font-semibold ${textColor}`}>
-                                    {percentage.toFixed(0)}%
-                                  </span>
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
+                      <div className="flex items-center gap-3 mt-1">
+                            <p className="text-sm text-gray-500">
+                              {group.vacancies.length > 0 
+                                ? `${group.vacancies.length} vacature${group.vacancies.length !== 1 ? 's' : ''}`
+                                : 'Geen zichtbare vacatures'
+                              }
+                            </p>
+                            {(() => {
+                              const hiresCount = getCompanyHires(group.company.name);
+                              return hiresCount > 0 && (
+                                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
+                                  <Users className="h-3 w-3 text-green-600" />
+                                  <span className="text-xs font-semibold text-green-700">{hiresCount}</span>
+                                  <span className="text-xs text-green-600">hires (90d)</span>
                                 </div>
-                                <div className="w-full bg-gray-100 rounded-full h-2 overflow-hidden mb-1">
-                                  <div
-                                    className={`h-full rounded-full transition-all duration-500 ease-out ${progressColor}`}
-                                    style={{ width: `${Math.min(100, percentage)}%` }}
-                                  />
-                                </div>
-                                <span className="text-xs text-gray-400">
-                                  {remaining.toFixed(1)}u resterend
-                                </span>
-                              </div>
-                            );
-                          }
-                          return null;
-                        })()}
+                              );
+                            })()}
                       </div>
                     </div>
                   </div>
@@ -916,6 +883,98 @@ export default function Dashboard() {
                     <PriorityBadge priority={group.companyPriority || 'Green'} />
                   </div>
                 </div>
+                {(() => {
+                  const hours = getCompanyHours(group.company.id, group.company.name);
+                  const prevHours = getPreviousWeekHours(group.company.id, group.company.name);
+                  const hasCurrentWeek = hours && hours.total_hours > 0;
+                  const hasPreviousWeek = prevHours && prevHours.total_hours > 0;
+                  
+                  // Always show hours section if user is admin (they can manage hours)
+                  // or if there's any hours data
+                  if (userRole === 'admin' || hasCurrentWeek || hasPreviousWeek) {
+                    return (
+                      <div className="mt-3 pt-3 border-t border-gray-100 space-y-3.5">
+                        {/* Current week */}
+                        {hasCurrentWeek ? (
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <Clock className="h-3.5 w-3.5 text-gray-500 flex-shrink-0" />
+                                <span className="text-xs text-gray-700 font-medium truncate">
+                                  Deze week: {hours.spent_hours.toFixed(1)} / {hours.total_hours.toFixed(1)} uren
+                                </span>
+                              </div>
+                              <span className={`text-xs font-bold ml-3 flex-shrink-0 ${
+                                (hours.spent_hours / hours.total_hours) * 100 > 80 ? 'text-red-600' : 
+                                (hours.spent_hours / hours.total_hours) * 100 > 50 ? 'text-orange-600' : 
+                                'text-green-600'
+                              }`}>
+                                {((hours.spent_hours / hours.total_hours) * 100).toFixed(0)}%
+                              </span>
+                            </div>
+                            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden mb-1.5">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ease-out ${
+                                  (hours.spent_hours / hours.total_hours) * 100 > 80 ? 'bg-red-500' : 
+                                  (hours.spent_hours / hours.total_hours) * 100 > 50 ? 'bg-orange-500' : 
+                                  'bg-green-500'
+                                }`}
+                                style={{ width: `${Math.min(100, (hours.spent_hours / hours.total_hours) * 100)}%` }}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs text-gray-500">
+                                {(hours.total_hours - hours.spent_hours).toFixed(1)}u resterend
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="py-1">
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-3.5 w-3.5 text-gray-300" />
+                              <span className="text-xs text-gray-400 font-medium">
+                                Deze week: Geen data
+                              </span>
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Previous week - always show */}
+                        <div className="pt-2.5 border-t border-gray-50">
+                          {hasPreviousWeek ? (
+                            <>
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <Clock className="h-3 w-3 text-gray-400 flex-shrink-0" />
+                                  <span className="text-xs text-gray-500 font-medium truncate">
+                                    Vorige week: {prevHours.spent_hours.toFixed(1)} / {prevHours.total_hours.toFixed(1)} uren
+                                  </span>
+                                </div>
+                                <span className="text-xs font-semibold text-gray-500 ml-3 flex-shrink-0">
+                                  {((prevHours.spent_hours / prevHours.total_hours) * 100).toFixed(0)}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-50 rounded-full h-2 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-gray-400 transition-all duration-500 ease-out"
+                                  style={{ width: `${Math.min(100, (prevHours.spent_hours / prevHours.total_hours) * 100)}%` }}
+                                />
+                              </div>
+                            </>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <Clock className="h-3 w-3 text-gray-300" />
+                              <span className="text-xs text-gray-400 font-medium">
+                                Vorige week: Geen data
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               {/* Table */}

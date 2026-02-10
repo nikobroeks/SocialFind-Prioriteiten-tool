@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Clock, X } from 'lucide-react';
+import { Clock, X, Calendar } from 'lucide-react';
 
 interface CompanyHoursModalProps {
   companyId: number;
@@ -9,6 +9,22 @@ interface CompanyHoursModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: () => void;
+}
+
+function getWeekStartDate(date: Date = new Date()): string {
+  const d = new Date(date);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+  const monday = new Date(d.setDate(diff));
+  monday.setHours(0, 0, 0, 0);
+  return monday.toISOString().split('T')[0];
+}
+
+function formatWeekRange(weekStart: string): string {
+  const start = new Date(weekStart);
+  const end = new Date(start);
+  end.setDate(end.getDate() + 6);
+  return `${start.toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit' })} - ${end.toLocaleDateString('nl-NL', { day: '2-digit', month: '2-digit' })}`;
 }
 
 export function CompanyHoursModal({
@@ -23,6 +39,7 @@ export function CompanyHoursModal({
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [currentWeekStart, setCurrentWeekStart] = useState<string>('');
 
   // Load existing hours when modal opens
   useEffect(() => {
@@ -41,6 +58,8 @@ export function CompanyHoursModal({
       if (!response.ok) throw new Error('Failed to load hours');
       
       const data = await response.json();
+      setCurrentWeekStart(data.currentWeekStart || getWeekStartDate());
+      
       if (data.hours) {
         setTotalHours(data.hours.total_hours?.toString() || '0');
         setSpentHours(data.hours.spent_hours?.toString() || '0');
@@ -89,6 +108,7 @@ export function CompanyHoursModal({
           companyName,
           totalHours: total,
           spentHours: spent,
+          weekStartDate: currentWeekStart || getWeekStartDate(),
         }),
       });
 
@@ -168,9 +188,18 @@ export function CompanyHoursModal({
                   </div>
                 )}
 
+                {currentWeekStart && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-blue-600" />
+                    <span className="text-sm font-medium text-blue-900">
+                      Week: {formatWeekRange(currentWeekStart)}
+                    </span>
+                  </div>
+                )}
+
                 <div>
                   <label htmlFor="totalHours" className="block text-sm font-medium text-gray-700 mb-2">
-                    Totaal uren
+                    Totaal uren (deze week)
                   </label>
                   <input
                     id="totalHours"
@@ -186,7 +215,7 @@ export function CompanyHoursModal({
 
                 <div>
                   <label htmlFor="spentHours" className="block text-sm font-medium text-gray-700 mb-2">
-                    Bestede uren
+                    Bestede uren (deze week)
                   </label>
                   <input
                     id="spentHours"
