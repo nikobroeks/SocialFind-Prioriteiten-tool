@@ -79,6 +79,27 @@ export interface CompanyHours {
   updated_by: string | null;
 }
 
+export interface UserCompanyCollapseState {
+  id: string;
+  user_id: string;
+  recruitee_company_id: number;
+  company_name: string;
+  is_collapsed: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CompanyRecruiters {
+  id: string;
+  recruitee_company_id: number;
+  company_name: string;
+  recruiter: string | null;
+  buddy: string | null;
+  created_at: string;
+  updated_at: string;
+  updated_by: string | null;
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -106,6 +127,16 @@ export interface Database {
         Row: CompanyHours;
         Insert: Omit<CompanyHours, 'id' | 'created_at' | 'updated_at'>;
         Update: Partial<Omit<CompanyHours, 'id' | 'created_at'>>;
+      };
+      user_company_collapse_state: {
+        Row: UserCompanyCollapseState;
+        Insert: Omit<UserCompanyCollapseState, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<UserCompanyCollapseState, 'id' | 'created_at'>>;
+      };
+      company_recruiters: {
+        Row: CompanyRecruiters;
+        Insert: Omit<CompanyRecruiters, 'id' | 'created_at' | 'updated_at'>;
+        Update: Partial<Omit<CompanyRecruiters, 'id' | 'created_at'>>;
       };
     };
   };

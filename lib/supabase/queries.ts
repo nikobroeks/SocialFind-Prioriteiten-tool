@@ -170,8 +170,7 @@ export async function setCompanyCollapseState(
   companyName: string,
   isCollapsed: boolean
 ): Promise<void> {
-  const { error } = await supabase
-    .from('user_company_collapse_state')
+  const { error } = await (supabase.from('user_company_collapse_state') as any)
     .upsert({
       user_id: userId,
       recruitee_company_id: companyId,
@@ -226,8 +225,7 @@ export async function setCompanyRecruiters(
   const { data: userData } = await supabase.auth.getUser();
   const userId = userData?.user?.id;
 
-  const { error } = await supabase
-    .from('company_recruiters')
+  const { error } = await (supabase.from('company_recruiters') as any)
     .upsert({
       recruitee_company_id: companyId,
       company_name: companyName,
