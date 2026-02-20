@@ -16,7 +16,7 @@ import { CompactView } from './compact-view';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getUserRole } from '@/lib/supabase/queries';
-import { Building2, TrendingUp, AlertCircle, Users, EyeOff, Search, Settings, Clock, Edit2 } from 'lucide-react';
+import { Building2, TrendingUp, AlertCircle, Users, EyeOff, Search, Settings, Clock, Edit2, User } from 'lucide-react';
 import { CompanyVisibilityToggle } from './company-visibility-toggle';
 import { CompanyVisibilityModal } from './company-visibility-modal';
 import { CompanyHoursModal } from './company-hours-modal';
@@ -25,6 +25,11 @@ import { SearchBar } from './search-bar';
 import { ExportButton } from './export-button';
 import { DashboardAnalytics } from './dashboard-analytics';
 import { useNotifications } from '@/contexts/notifications-context';
+import { CompanyRecruiterSelector } from './company-recruiter-selector';
+import { getUserCompanyCollapseState, setCompanyCollapseState, getCompanyRecruiters } from '@/lib/supabase/queries';
+import { FunctionGroup as FunctionGroupType } from '@/types/dashboard';
+import { supabase } from '@/lib/supabase/client';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export default function Dashboard() {
   const [userRole, setUserRole] = useState<'admin' | 'viewer' | null>(null);
@@ -164,6 +169,63 @@ export default function Dashboard() {
   });
 
   const knownCompaniesFromDB = knownCompaniesData?.companies?.map((c: any) => c.company_name) || [];
+
+  // Get current user ID for collapse state
+  const { data: userData } = useQuery({
+    queryKey: ['currentUser'],
+    queryFn: async () => {
+      const { data } = await supabase.auth.getUser();
+      return data?.user;
+    },
+    staleTime: 60 * 60 * 1000, // 1 hour
+  });
+
+  const userId = userData?.id || '';
+
+  // Fetch collapse state for all companies
+  const { data: collapseStateData } = useQuery({
+    queryKey: ['companyCollapseState', userId],
+    queryFn: async () => {
+      if (!userId) return {};
+      return getUserCompanyCollapseState(userId);
+    },
+    enabled: !!userId,
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const companyCollapseState = collapseStateData || {};
+  
+  // Fetch recruiter/buddy data for all companies
+  const { data: recruitersData } = useQuery({
+    queryKey: ['companyRecruiters'],
+    queryFn: async () => {
+      // Fetch all company recruiters
+      const { data, error } = await supabase
+        .from('company_recruiters')
+        .select('recruitee_company_id, company_name, recruiter, buddy');
+      
+      if (error) {
+        console.error('Error fetching recruiters:', error);
+        return {};
+      }
+
+      // Convert to a map: { companyId-companyName: { recruiter, buddy } }
+      const recruitersMap: Record<string, { recruiter: string | null; buddy: string | null }> = {};
+      (data || []).forEach((row: any) => {
+        const key = `${row.recruitee_company_id}-${row.company_name}`;
+        recruitersMap[key] = {
+          recruiter: row.recruiter,
+          buddy: row.buddy,
+        };
+      });
+      return recruitersMap;
+    },
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
+  });
+
+  const recruitersMap = recruitersData || {};
   
   // Helper function to normalize company names for matching
   const normalizeCompanyName = (name: string): string => {
@@ -494,6 +556,7 @@ export default function Dashboard() {
   });
 
   // Bereken company priority: hoogste priority van alle vacatures binnen dat bedrijf
+  // En groepeer vacatures per functie (title)
   const companyGroupsWithPriority = knownCompanyGroups.map(group => {
     const priorities = group.vacancies.map(v => {
       const priorityValue = v.displayPriority === 'Red' ? 3 : 
@@ -504,10 +567,61 @@ export default function Dashboard() {
     const companyPriority: PriorityColor = maxPriority === 3 ? 'Red' : 
                                            maxPriority === 2 ? 'Orange' : 'Green';
     
+    // Groepeer vacatures per functie (title)
+    const functionGroupsMap = group.vacancies.reduce((acc, vacancy) => {
+      const title = vacancy.job.title;
+      if (!acc[title]) {
+        acc[title] = {
+          title,
+          vacancies: [],
+          priority: 'Green' as PriorityColor,
+        };
+      }
+      acc[title].vacancies.push(vacancy);
+      return acc;
+    }, {} as Record<string, FunctionGroupType>);
+
+    // Bereken priority per functie en sorteer vacatures binnen functie
+    const functionGroups: FunctionGroupType[] = Object.values(functionGroupsMap).map(funcGroup => {
+      const funcPriorities = funcGroup.vacancies.map(v => {
+        const priorityValue = v.displayPriority === 'Red' ? 3 : 
+                             v.displayPriority === 'Orange' ? 2 : 1;
+        return priorityValue;
+      });
+      const funcMaxPriority = Math.max(...funcPriorities);
+      const funcPriority: PriorityColor = funcMaxPriority === 3 ? 'Red' : 
+                                         funcMaxPriority === 2 ? 'Orange' : 'Green';
+      
+      return {
+        ...funcGroup,
+        priority: funcPriority,
+        // Sorteer vacatures binnen functie op priority (hoogste eerst)
+        vacancies: [...funcGroup.vacancies].sort((a, b) => {
+          const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
+          return priorityOrder[b.displayPriority] - priorityOrder[a.displayPriority];
+        }),
+      };
+    });
+
+    // Sorteer functies op priority (hoogste eerst), dan op naam
+    functionGroups.sort((a, b) => {
+      const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
+      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return a.title.localeCompare(b.title);
+    });
+
+    // Get recruiter and buddy for this company
+    const recruiterKey = `${group.company.id}-${group.company.name}`;
+    const recruiterData = recruitersMap[recruiterKey] || { recruiter: null, buddy: null };
+    
     return {
       ...group,
       companyPriority,
-      // Sorteer vacatures binnen het bedrijf op priority (hoogste eerst)
+      functions: functionGroups,
+      recruiter: recruiterData.recruiter,
+      buddy: recruiterData.buddy,
+      // Keep vacancies for backward compatibility (used in other views)
       vacancies: [...group.vacancies].sort((a, b) => {
         const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
         return priorityOrder[b.displayPriority] - priorityOrder[a.displayPriority];
@@ -534,9 +648,57 @@ export default function Dashboard() {
     const companyPriority: PriorityColor = maxPriority === 3 ? 'Red' : 
                                          maxPriority === 2 ? 'Orange' : 'Green';
     
+    // Groepeer vacatures per functie (title) voor Overig ook
+    const functionGroupsMap = group.vacancies.reduce((acc, vacancy) => {
+      const title = vacancy.job.title;
+      if (!acc[title]) {
+        acc[title] = {
+          title,
+          vacancies: [],
+          priority: 'Green' as PriorityColor,
+        };
+      }
+      acc[title].vacancies.push(vacancy);
+      return acc;
+    }, {} as Record<string, FunctionGroupType>);
+
+    const functionGroups: FunctionGroupType[] = Object.values(functionGroupsMap).map(funcGroup => {
+      const funcPriorities = funcGroup.vacancies.map(v => {
+        const priorityValue = v.displayPriority === 'Red' ? 3 : 
+                             v.displayPriority === 'Orange' ? 2 : 1;
+        return priorityValue;
+      });
+      const funcMaxPriority = Math.max(...funcPriorities);
+      const funcPriority: PriorityColor = funcMaxPriority === 3 ? 'Red' : 
+                                         funcMaxPriority === 2 ? 'Orange' : 'Green';
+      
+      return {
+        ...funcGroup,
+        priority: funcPriority,
+        vacancies: [...funcGroup.vacancies].sort((a, b) => {
+          const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
+          return priorityOrder[b.displayPriority] - priorityOrder[a.displayPriority];
+        }),
+      };
+    });
+
+    functionGroups.sort((a, b) => {
+      const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
+      const priorityDiff = priorityOrder[b.priority] - priorityOrder[a.priority];
+      if (priorityDiff !== 0) return priorityDiff;
+      return a.title.localeCompare(b.title);
+    });
+
+    const recruiterKey = `${group.company.id}-${group.company.name}`;
+    const recruiterData = recruitersMap[recruiterKey] || { recruiter: null, buddy: null };
+    
     return {
       ...group,
       companyPriority,
+      functions: functionGroups,
+      recruiter: recruiterData.recruiter,
+      buddy: recruiterData.buddy,
+      // Keep vacancies for backward compatibility
       vacancies: [...group.vacancies].sort((a, b) => {
         const priorityOrder: Record<PriorityColor, number> = { Red: 3, Orange: 2, Green: 1 };
         return priorityOrder[b.displayPriority] - priorityOrder[a.displayPriority];
@@ -662,6 +824,27 @@ export default function Dashboard() {
   const totalVacancies = jobs.length;
   const totalCompanies = finalCompanyGroups.length;
 
+  // Handler voor company collapse toggle
+  const handleCompanyCollapseToggle = async (companyId: number, companyName: string) => {
+    if (!userId) return;
+    
+    const collapseKey = `${companyId}-${companyName}`;
+    const currentState = companyCollapseState[collapseKey] ?? false;
+    const newState = !currentState;
+
+    try {
+      // Optimistically update
+      await setCompanyCollapseState(userId, companyId, companyName, newState);
+      
+      // Invalidate queries to refresh
+      queryClient.invalidateQueries({
+        queryKey: ['companyCollapseState', userId],
+      });
+    } catch (error) {
+      console.error('Error toggling company collapse:', error);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50">
       <DashboardHeader totalCompanies={totalCompanies} totalVacancies={totalVacancies} userRole={userRole} />
@@ -769,6 +952,9 @@ export default function Dashboard() {
             Green: 'border-l-green-500',
           }[group.companyPriority || 'Green'];
 
+          const collapseKey = `${group.company.id}-${group.company.name}`;
+          const isCompanyCollapsed = companyCollapseState[collapseKey] ?? false;
+
           return (
             <div 
               key={`company-group-${index}-${group.company.id}`} 
@@ -778,29 +964,57 @@ export default function Dashboard() {
               <div className="bg-gradient-to-r from-gray-50 to-white px-6 py-4 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3 flex-1">
+                    <button
+                      onClick={() => handleCompanyCollapseToggle(group.company.id, group.company.name)}
+                      className="flex-shrink-0 p-1 hover:bg-gray-200 rounded transition-colors"
+                      aria-label={isCompanyCollapsed ? 'Bedrijf uitklappen' : 'Bedrijf inklappen'}
+                    >
+                      {isCompanyCollapsed ? (
+                        <ChevronRight className="h-5 w-5 text-gray-600" />
+                      ) : (
+                        <ChevronDown className="h-5 w-5 text-gray-600" />
+                      )}
+                    </button>
                     <div className="h-10 w-10 bg-gradient-to-br from-orange-500 to-orange-600 rounded-lg flex items-center justify-center shadow-sm flex-shrink-0">
                       <Building2 className="h-5 w-5 text-white" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
-                      <div className="flex items-center gap-3 mt-1">
-                            <p className="text-sm text-gray-500">
-                              {group.vacancies.length > 0 
-                                ? `${group.vacancies.length} vacature${group.vacancies.length !== 1 ? 's' : ''}`
-                                : 'Geen zichtbare vacatures'
-                              }
-                            </p>
-                            {(() => {
-                              const hiresCount = getCompanyHires(group.company.name);
-                              return hiresCount > 0 && (
-                                <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
-                                  <Users className="h-3 w-3 text-green-600" />
-                                  <span className="text-xs font-semibold text-green-700">{hiresCount}</span>
-                                  <span className="text-xs text-green-600">hires (90d)</span>
+                        <h2 className="text-xl font-bold text-gray-900">{group.company.name}</h2>
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                          <p className="text-sm text-gray-500">
+                            {group.vacancies.length > 0 
+                              ? `${group.vacancies.length} vacature${group.vacancies.length !== 1 ? 's' : ''}`
+                              : 'Geen zichtbare vacatures'
+                            }
+                          </p>
+                          {(() => {
+                            const hiresCount = getCompanyHires(group.company.name);
+                            return hiresCount > 0 && (
+                              <div className="flex items-center gap-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded-full">
+                                <Users className="h-3 w-3 text-green-600" />
+                                <span className="text-xs font-semibold text-green-700">{hiresCount}</span>
+                                <span className="text-xs text-green-600">hires (90d)</span>
+                              </div>
+                            );
+                          })()}
+                          {/* Recruiter and Buddy display */}
+                          {(group.recruiter || group.buddy) && (
+                            <div className="flex items-center gap-2">
+                              {group.recruiter && (
+                                <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-full">
+                                  <User className="h-3 w-3 text-blue-600" />
+                                  <span className="text-xs font-medium text-blue-700">{group.recruiter}</span>
                                 </div>
-                              );
-                            })()}
-                      </div>
+                              )}
+                              {group.buddy && (
+                                <div className="flex items-center gap-1 px-2 py-0.5 bg-purple-50 border border-purple-200 rounded-full">
+                                  <Users className="h-3 w-3 text-purple-600" />
+                                  <span className="text-xs font-medium text-purple-700">{group.buddy}</span>
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
@@ -870,6 +1084,13 @@ export default function Dashboard() {
                         />
                       );
                     })()}
+                    <CompanyRecruiterSelector
+                      companyId={group.company.id}
+                      companyName={group.company.name}
+                      currentRecruiter={group.recruiter}
+                      currentBuddy={group.buddy}
+                      isAdmin={userRole === 'admin'}
+                    />
                     {userRole === 'admin' && (
                       <button
                         onClick={() => setCompanyHoursModal({ companyId: group.company.id, companyName: group.company.name })}
@@ -977,9 +1198,11 @@ export default function Dashboard() {
                 })()}
               </div>
 
-              {/* Table */}
+              {/* Vacatures - Only show when not collapsed */}
+              {!isCompanyCollapsed && (
               <div>
                 {group.vacancies.length > 0 ? (
+                  // Fallback: show table if functions are not available
                   <table className="w-full border-collapse table-fixed" role="table" aria-label={`Vacatures voor ${group.company.name}`}>
                     <colgroup>
                       <col className="w-[20%]" />
@@ -1018,7 +1241,6 @@ export default function Dashboard() {
                               .filter(g => g.company.name !== 'Overig' && g.company.name !== 'Onbekend Bedrijf')
                               .map(g => ({ id: g.company.id, name: g.company.name }))}
                             onCompanyAssign={async (jobId: number, companyName: string) => {
-                              // Update the job's company assignment
                               const response = await fetch('/api/vacancy-assign-company', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -1028,13 +1250,10 @@ export default function Dashboard() {
                                 const error = await response.json();
                                 throw new Error(error.error || 'Failed to assign company');
                               }
-                              // Refresh data - invalidate all recruiteeJobs queries
                               queryClient.invalidateQueries({ 
                                 queryKey: ['recruiteeJobs'],
-                                exact: false // Invalidate all queries that start with 'recruiteeJobs'
+                                exact: false
                               });
-                              
-                              // Force refetch
                               queryClient.refetchQueries({ 
                                 queryKey: ['recruiteeJobs'],
                                 exact: false 
@@ -1057,6 +1276,7 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+              )}
             </div>
           );
         })

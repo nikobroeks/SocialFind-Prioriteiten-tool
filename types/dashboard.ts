@@ -21,10 +21,19 @@ export interface VacancyWithPriority {
   displayPriority: PriorityColor;
 }
 
+export interface FunctionGroup {
+  title: string;
+  vacancies: VacancyWithPriority[];
+  priority: PriorityColor; // Hoogste priority van alle vacatures binnen deze functie
+}
+
 export interface CompanyGroup {
   company: RecruiteeCompany;
   vacancies: VacancyWithPriority[];
+  functions?: FunctionGroup[]; // Functies gegroepeerd op basis van vacature titel
   companyPriority?: PriorityColor; // Hoogste priority van alle vacatures binnen dit bedrijf
+  recruiter?: string | null; // Naam van recruiter (Ken, Sam, Lois, Fatih, Just, Maris, Ylin, Sieme)
+  buddy?: string | null; // Naam van buddy (zelfde opties)
 }
 
 import { ClientPainLevel, TimeCriticality, StrategicValue, AccountHealth } from './database';

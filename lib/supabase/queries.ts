@@ -135,3 +135,111 @@ export async function getUserRole(): Promise<'admin' | 'viewer' | null> {
   return (data as any).role as 'admin' | 'viewer';
 }
 
+/**
+ * Haalt de collapse state op voor alle bedrijven van een gebruiker
+ */
+export async function getUserCompanyCollapseState(
+  userId: string
+): Promise<Record<string, boolean>> {
+  const { data, error } = await supabase
+    .from('user_company_collapse_state')
+    .select('recruitee_company_id, company_name, is_collapsed')
+    .eq('user_id', userId);
+
+  if (error) {
+    console.error('Error fetching collapse state:', error);
+    return {};
+  }
+
+  // Convert array to record: { "companyId-companyName": isCollapsed }
+  const collapseState: Record<string, boolean> = {};
+  (data || []).forEach((row: any) => {
+    const key = `${row.recruitee_company_id}-${row.company_name}`;
+    collapseState[key] = row.is_collapsed;
+  });
+
+  return collapseState;
+}
+
+/**
+ * Stelt de collapse state in voor een specifiek bedrijf
+ */
+export async function setCompanyCollapseState(
+  userId: string,
+  companyId: number,
+  companyName: string,
+  isCollapsed: boolean
+): Promise<void> {
+  const { error } = await supabase
+    .from('user_company_collapse_state')
+    .upsert({
+      user_id: userId,
+      recruitee_company_id: companyId,
+      company_name: companyName,
+      is_collapsed: isCollapsed,
+    }, {
+      onConflict: 'user_id,recruitee_company_id,company_name',
+    });
+
+  if (error) {
+    throw new Error(`Error setting collapse state: ${error.message}`);
+  }
+}
+
+/**
+ * Haalt recruiter en buddy op voor een bedrijf
+ */
+export async function getCompanyRecruiters(
+  companyId: number,
+  companyName: string
+): Promise<{ recruiter: string | null; buddy: string | null } | null> {
+  const { data, error } = await supabase
+    .from('company_recruiters')
+    .select('recruiter, buddy')
+    .eq('recruitee_company_id', companyId)
+    .eq('company_name', companyName)
+    .single();
+
+  if (error) {
+    if (error.code === 'PGRST116') {
+      // Not found
+      return null;
+    }
+    throw new Error(`Error fetching company recruiters: ${error.message}`);
+  }
+
+  return {
+    recruiter: data?.recruiter || null,
+    buddy: data?.buddy || null,
+  };
+}
+
+/**
+ * Stelt recruiter en buddy in voor een bedrijf
+ */
+export async function setCompanyRecruiters(
+  companyId: number,
+  companyName: string,
+  recruiter: string | null,
+  buddy: string | null
+): Promise<void> {
+  const { data: userData } = await supabase.auth.getUser();
+  const userId = userData?.user?.id;
+
+  const { error } = await supabase
+    .from('company_recruiters')
+    .upsert({
+      recruitee_company_id: companyId,
+      company_name: companyName,
+      recruiter: recruiter || null,
+      buddy: buddy || null,
+      updated_by: userId || null,
+    }, {
+      onConflict: 'recruitee_company_id,company_name',
+    });
+
+  if (error) {
+    throw new Error(`Error setting company recruiters: ${error.message}`);
+  }
+}
+
