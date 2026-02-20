@@ -106,7 +106,7 @@ export async function fetchRecruiteeJobs(
                        parseInt(RECRUITEE_COMPANY_ID!); // Fallback naar de company ID uit de URL
       
       // Extract bedrijfsnaam uit titel (PRIMAIRE BRON)
-      let companyNameFromTitle = extractCompanyFromTitle(job.title || '');
+      let companyNameFromTitle: string | null = extractCompanyFromTitle(job.title || '');
       if (companyNameFromTitle !== 'Onbekend Bedrijf') {
         companyNameFromTitle = cleanCompanyName(companyNameFromTitle);
       } else {
