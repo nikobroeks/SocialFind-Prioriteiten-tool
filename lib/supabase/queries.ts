@@ -192,8 +192,7 @@ export async function getCompanyRecruiters(
   companyId: number,
   companyName: string
 ): Promise<{ recruiter: string | null; buddy: string | null } | null> {
-  const { data, error } = await supabase
-    .from('company_recruiters')
+  const { data, error } = await (supabase.from('company_recruiters') as any)
     .select('recruiter, buddy')
     .eq('recruitee_company_id', companyId)
     .eq('company_name', companyName)
@@ -208,8 +207,8 @@ export async function getCompanyRecruiters(
   }
 
   return {
-    recruiter: data?.recruiter || null,
-    buddy: data?.buddy || null,
+    recruiter: (data as any)?.recruiter || null,
+    buddy: (data as any)?.buddy || null,
   };
 }
 
