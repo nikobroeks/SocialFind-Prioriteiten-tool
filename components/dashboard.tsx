@@ -13,6 +13,7 @@ import { DashboardHeader } from './dashboard-header';
 import { ViewToggle, ViewMode } from './view-toggle';
 import { KanbanView } from './kanban-view';
 import { CompactView } from './compact-view';
+import { DashboardOverview } from './dashboard-overview';
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { getUserRole } from '@/lib/supabase/queries';
@@ -33,7 +34,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react';
 
 export default function Dashboard() {
   const [userRole, setUserRole] = useState<'admin' | 'viewer' | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>('table');
+  const [viewMode, setViewMode] = useState<ViewMode>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [isCompanyVisibilityModalOpen, setIsCompanyVisibilityModalOpen] = useState(false);
   const [companyHoursModal, setCompanyHoursModal] = useState<{ companyId: number; companyName: string } | null>(null);
@@ -926,6 +927,18 @@ export default function Dashboard() {
                 </div>
               )}
             </div>
+          ) : viewMode === 'dashboard' ? (
+            // Dashboard Overview - Priority-first overview
+            <DashboardOverview
+              companyGroups={filteredCompanyGroups}
+              vacancies={filteredVacancies}
+              companyHires={companyHires}
+              applicantsPerVacancy={applicantsPerVacancy}
+              companyHoursData={companyHours}
+              previousWeekHoursData={previousWeekHours}
+              searchQuery={searchQuery}
+              isAdmin={userRole === 'admin'}
+            />
           ) : viewMode === 'kanban' ? (
             // Kanban View - All vacancies grouped by priority
             <KanbanView 
@@ -1101,101 +1114,68 @@ export default function Dashboard() {
                         <span className="hidden sm:inline">Uren</span>
                       </button>
                     )}
+                    {(() => {
+                      const hours = getCompanyHours(group.company.id, group.company.name);
+                      const prevHours = getPreviousWeekHours(group.company.id, group.company.name);
+                      const hasCurrentWeek = hours && hours.total_hours > 0;
+                      const hasPreviousWeek = prevHours && prevHours.total_hours > 0;
+
+                      if (!(userRole === 'admin' || hasCurrentWeek || hasPreviousWeek)) {
+                        return null;
+                      }
+
+                      const pctCurrent = hasCurrentWeek
+                        ? Math.min(100, (hours.spent_hours / hours.total_hours) * 100)
+                        : 0;
+                      return (
+                        <div className="flex flex-col gap-1 text-xs leading-tight text-gray-600 min-w-[160px]">
+                          {/* Deze week */}
+                          {hasCurrentWeek ? (
+                            <div>
+                              <div className="flex items-center justify-between gap-2 mb-0.5">
+                                <div className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3 text-gray-500" />
+                                  <span>Deze week: {hours.spent_hours.toFixed(1)} / {hours.total_hours.toFixed(1)}u</span>
+                                </div>
+                                <span className={`font-semibold flex-shrink-0 ${
+                                  pctCurrent > 80 ? 'text-red-600' : pctCurrent > 50 ? 'text-orange-600' : 'text-green-600'
+                                }`}>
+                                  {pctCurrent.toFixed(0)}%
+                                </span>
+                              </div>
+                              <div className="w-full bg-gray-100 rounded-full h-1.5 overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    pctCurrent > 80 ? 'bg-red-500' : pctCurrent > 50 ? 'bg-orange-500' : 'bg-green-500'
+                                  }`}
+                                  style={{ width: `${pctCurrent}%` }}
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1 text-gray-400">
+                              <Clock className="h-3 w-3" />
+                              <span>Deze week: Geen data</span>
+                            </div>
+                          )}
+                          {/* Vorige week */}
+                          <div className="flex items-center gap-1 text-gray-400">
+                            <Clock className="h-3 w-3" />
+                            {hasPreviousWeek ? (
+                              <span>
+                                Vorige week: {prevHours.spent_hours.toFixed(1)} / {prevHours.total_hours.toFixed(1)}u
+                                {' '}({((prevHours.spent_hours / prevHours.total_hours) * 100).toFixed(0)}%)
+                              </span>
+                            ) : (
+                              <span>Vorige week: Geen data</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <PriorityBadge priority={group.companyPriority || 'Green'} />
                   </div>
                 </div>
-                {(() => {
-                  const hours = getCompanyHours(group.company.id, group.company.name);
-                  const prevHours = getPreviousWeekHours(group.company.id, group.company.name);
-                  const hasCurrentWeek = hours && hours.total_hours > 0;
-                  const hasPreviousWeek = prevHours && prevHours.total_hours > 0;
-                  
-                  // Always show hours section if user is admin (they can manage hours)
-                  // or if there's any hours data
-                  if (userRole === 'admin' || hasCurrentWeek || hasPreviousWeek) {
-                    return (
-                      <div className="mt-3 pt-3 border-t border-gray-100 space-y-3.5">
-                        {/* Current week */}
-                        {hasCurrentWeek ? (
-                          <div>
-                            <div className="flex items-center justify-between mb-2">
-                              <div className="flex items-center gap-2 min-w-0 flex-1">
-                                <Clock className="h-3.5 w-3.5 text-gray-500 flex-shrink-0" />
-                                <span className="text-xs text-gray-700 font-medium truncate">
-                                  Deze week: {hours.spent_hours.toFixed(1)} / {hours.total_hours.toFixed(1)} uren
-                                </span>
-                              </div>
-                              <span className={`text-xs font-bold ml-3 flex-shrink-0 ${
-                                (hours.spent_hours / hours.total_hours) * 100 > 80 ? 'text-red-600' : 
-                                (hours.spent_hours / hours.total_hours) * 100 > 50 ? 'text-orange-600' : 
-                                'text-green-600'
-                              }`}>
-                                {((hours.spent_hours / hours.total_hours) * 100).toFixed(0)}%
-                              </span>
-                            </div>
-                            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden mb-1.5">
-                              <div
-                                className={`h-full rounded-full transition-all duration-500 ease-out ${
-                                  (hours.spent_hours / hours.total_hours) * 100 > 80 ? 'bg-red-500' : 
-                                  (hours.spent_hours / hours.total_hours) * 100 > 50 ? 'bg-orange-500' : 
-                                  'bg-green-500'
-                                }`}
-                                style={{ width: `${Math.min(100, (hours.spent_hours / hours.total_hours) * 100)}%` }}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between">
-                              <span className="text-xs text-gray-500">
-                                {(hours.total_hours - hours.spent_hours).toFixed(1)}u resterend
-                              </span>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="py-1">
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-3.5 w-3.5 text-gray-300" />
-                              <span className="text-xs text-gray-400 font-medium">
-                                Deze week: Geen data
-                              </span>
-                            </div>
-                          </div>
-                        )}
-                        
-                        {/* Previous week - always show */}
-                        <div className="pt-2.5 border-t border-gray-50">
-                          {hasPreviousWeek ? (
-                            <>
-                              <div className="flex items-center justify-between mb-2">
-                                <div className="flex items-center gap-2 min-w-0 flex-1">
-                                  <Clock className="h-3 w-3 text-gray-400 flex-shrink-0" />
-                                  <span className="text-xs text-gray-500 font-medium truncate">
-                                    Vorige week: {prevHours.spent_hours.toFixed(1)} / {prevHours.total_hours.toFixed(1)} uren
-                                  </span>
-                                </div>
-                                <span className="text-xs font-semibold text-gray-500 ml-3 flex-shrink-0">
-                                  {((prevHours.spent_hours / prevHours.total_hours) * 100).toFixed(0)}%
-                                </span>
-                              </div>
-                              <div className="w-full bg-gray-50 rounded-full h-2 overflow-hidden">
-                                <div
-                                  className="h-full rounded-full bg-gray-400 transition-all duration-500 ease-out"
-                                  style={{ width: `${Math.min(100, (prevHours.spent_hours / prevHours.total_hours) * 100)}%` }}
-                                />
-                              </div>
-                            </>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <Clock className="h-3 w-3 text-gray-300" />
-                              <span className="text-xs text-gray-400 font-medium">
-                                Vorige week: Geen data
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  }
-                  return null;
-                })()}
               </div>
 
               {/* Vacatures - Only show when not collapsed */}

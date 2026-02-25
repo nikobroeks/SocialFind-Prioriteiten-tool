@@ -1,9 +1,9 @@
 'use client';
 
-import { LayoutGrid, Columns3, List } from 'lucide-react';
+import { LayoutGrid, Columns3, List, BarChart2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-export type ViewMode = 'table' | 'kanban' | 'compact';
+export type ViewMode = 'table' | 'kanban' | 'compact' | 'dashboard';
 
 interface ViewToggleProps {
   currentView: ViewMode;
@@ -12,6 +12,7 @@ interface ViewToggleProps {
 
 export function ViewToggle({ currentView, onViewChange }: ViewToggleProps) {
   const views: { mode: ViewMode; icon: typeof LayoutGrid; label: string }[] = [
+    { mode: 'dashboard', icon: BarChart2, label: 'Overzicht' },
     { mode: 'table', icon: LayoutGrid, label: 'Tabel' },
     { mode: 'kanban', icon: Columns3, label: 'Kanban' },
     { mode: 'compact', icon: List, label: 'Compact' },

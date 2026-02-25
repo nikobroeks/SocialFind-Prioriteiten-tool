@@ -42,19 +42,21 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
 
   return (
     <>
-      <div className="space-y-4">
+      <div className="space-y-2">
         {companyGroups.map((group, index) => (
           <div
             key={`compact-company-${index}-${group.company.id}`}
-            className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
+            className="bg-white rounded-md border border-gray-200 shadow-sm overflow-hidden"
           >
             {/* Company Header */}
-            <div className="bg-gradient-to-r from-gray-50 to-white px-4 py-3 border-b border-gray-200">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-orange-500" />
-                  <h3 className="font-semibold text-gray-900">{group.company.name}</h3>
-                  <span className="text-xs text-gray-500">
+            <div className="bg-gradient-to-r from-gray-50 to-white px-3 py-2 border-b border-gray-200">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Building2 className="h-3.5 w-3.5 text-orange-500 flex-shrink-0" />
+                  <h3 className="font-semibold text-sm text-gray-900 truncate max-w-[220px] sm:max-w-xs">
+                    {group.company.name}
+                  </h3>
+                  <span className="text-[11px] text-gray-500 whitespace-nowrap">
                     ({group.vacancies.length} vacatures)
                   </span>
                   {(() => {
@@ -112,9 +114,9 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
             {/* Vacancies List */}
             <div className="divide-y divide-gray-100">
               {group.vacancies.length === 0 ? (
-                <div className="px-4 py-8 text-center">
-                  <Inbox className="h-6 w-6 text-gray-300 mx-auto mb-2" />
-                  <p className="text-xs text-gray-400">
+                <div className="px-3 py-4 text-center">
+                  <Inbox className="h-5 w-5 text-gray-300 mx-auto mb-2" />
+                  <p className="text-[11px] text-gray-400">
                     {searchQuery ? 'Geen vacatures gevonden voor deze zoekopdracht' : 'Geen vacatures beschikbaar'}
                   </p>
                 </div>
@@ -124,12 +126,12 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                   return (
                 <div
                   key={vacancy.job.id}
-                  className="px-4 py-3 hover:bg-gray-50 transition-colors"
+                  className="px-3 py-2 hover:bg-gray-50 transition-colors"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-3 mb-1 flex-wrap">
-                        <h4 className="font-medium text-gray-900 text-sm truncate">
+                      <div className="flex items-center gap-2 mb-0.5 flex-wrap">
+                        <h4 className="font-medium text-gray-900 text-xs truncate max-w-[260px] sm:max-w-sm">
                           {vacancy.job.title}
                         </h4>
                         {applicantCount > 0 && (
@@ -141,7 +143,7 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                         )}
                         <PriorityBadge priority={vacancy.displayPriority} />
                       </div>
-                      <div className="flex flex-wrap items-center gap-3 text-xs text-gray-500 mt-1">
+                      <div className="flex flex-wrap items-center gap-2 text-[11px] text-gray-500 mt-0.5">
                         <span>
                           <span className="font-medium">Klant pijn:</span>{' '}
                           {vacancy.priority?.client_pain_level || '-'}
@@ -163,7 +165,7 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                     {isAdmin && (
                       <button
                         onClick={() => handleEdit(vacancy)}
-                        className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded transition-colors"
+                        className="inline-flex items-center gap-1 px-2 py-1 text-[11px] font-medium text-orange-600 hover:text-orange-700 hover:bg-orange-50 rounded transition-colors whitespace-nowrap"
                       >
                         <Edit2 className="h-3 w-3" />
                         Bewerken
