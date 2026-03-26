@@ -258,7 +258,7 @@ export function DashboardOverview({
                               title={`${totalApplicantCount} totaal gesolliciteerd`}
                             >
                               <Users className="h-3 w-3" />
-                              {newApplicantCount} nieuw
+                              {newApplicantCount} gesolliciteerd
                             </span>
                           )}
                           {vacancy.priority?.client_pain_level && (

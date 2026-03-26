@@ -89,7 +89,7 @@ export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, totalApplican
                     >
                       <Users className="h-3 w-3 text-blue-600" />
                       <span className="text-xs font-semibold text-blue-700">{applicantCount}</span>
-                      <span className="text-xs text-blue-600">nieuw</span>
+                      <span className="text-xs text-blue-600">gesolliciteerd</span>
                     </div>
                   </div>
                 )}
@@ -147,7 +147,7 @@ export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, totalApplican
                 >
                   <Users className="h-3 w-3 text-blue-600" />
                   {applicantCount}
-                  <span className="text-[10px] text-gray-400 font-normal">nieuw</span>
+                  <span className="text-[10px] text-gray-400 font-normal">gesolliciteerd</span>
                 </span>
               </div>
               <div>
@@ -260,7 +260,7 @@ export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, totalApplican
             <Users className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
             <span className="font-semibold text-gray-900">{applicantCount}</span>
             {applicantCount > 0 && (
-              <span className="text-[10px] text-blue-400">nieuw</span>
+              <span className="text-[10px] text-blue-400">gesolliciteerd</span>
             )}
           </div>
         </td>
