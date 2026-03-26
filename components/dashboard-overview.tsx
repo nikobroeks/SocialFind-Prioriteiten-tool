@@ -18,6 +18,7 @@ interface DashboardOverviewProps {
   vacancies: VacancyWithPriority[];
   companyHires?: Record<string, number>;
   applicantsPerVacancy?: Record<string, number>;
+  newApplicantsPerVacancy?: Record<string, number>;
   companyHoursData?: CompanyHoursEntry[];
   previousWeekHoursData?: CompanyHoursEntry[];
   searchQuery?: string;
@@ -31,6 +32,7 @@ export function DashboardOverview({
   vacancies,
   companyHires = {},
   applicantsPerVacancy = {},
+  newApplicantsPerVacancy = {},
   companyHoursData = [],
   previousWeekHoursData = [],
   searchQuery = '',
@@ -224,7 +226,9 @@ export function DashboardOverview({
                 </div>
               ) : (
                 topVacancies.map((vacancy) => {
-                  const applicantCount =
+                  const newApplicantCount =
+                    newApplicantsPerVacancy[vacancy.job.id.toString()] || 0;
+                  const totalApplicantCount =
                     applicantsPerVacancy[vacancy.job.id.toString()] || 0;
                   return (
                     <div
@@ -248,10 +252,13 @@ export function DashboardOverview({
                           <span className="text-[11px] text-gray-500 truncate">
                             {vacancy.company.name}
                           </span>
-                          {applicantCount > 0 && (
-                            <span className="inline-flex items-center gap-0.5 text-[11px] text-blue-600 font-medium">
+                          {(newApplicantCount > 0 || totalApplicantCount > 0) && (
+                            <span
+                              className="inline-flex items-center gap-0.5 text-[11px] text-blue-600 font-medium"
+                              title={`${totalApplicantCount} totaal gesolliciteerd`}
+                            >
                               <Users className="h-3 w-3" />
-                              {applicantCount} soll.
+                              {newApplicantCount} nieuw
                             </span>
                           )}
                           {vacancy.priority?.client_pain_level && (

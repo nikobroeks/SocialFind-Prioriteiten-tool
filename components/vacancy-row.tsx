@@ -11,11 +11,12 @@ interface VacancyRowProps {
   vacancy: VacancyWithPriority;
   isAdmin: boolean;
   applicantCount?: number;
+  totalApplicantCount?: number;
   allCompanies?: Array<{ id: number; name: string }>;
   onCompanyAssign?: (jobId: number, companyName: string) => void;
 }
 
-export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, allCompanies = [], onCompanyAssign }: VacancyRowProps) {
+export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, totalApplicantCount = 0, allCompanies = [], onCompanyAssign }: VacancyRowProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isAssigningCompany, setIsAssigningCompany] = useState(false);
   const [selectedCompany, setSelectedCompany] = useState<string>('');
@@ -80,12 +81,15 @@ export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, allCompanies 
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
                 <h3 className="font-medium text-gray-900 text-sm">{vacancy.job.title}</h3>
-                {applicantCount > 0 && (
+                {(applicantCount > 0 || totalApplicantCount > 0) && (
                   <div className="flex items-center gap-1.5 mt-1.5">
-                    <div className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-full">
+                    <div
+                      className="flex items-center gap-1 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded-full"
+                      title={`${totalApplicantCount} totaal gesolliciteerd`}
+                    >
                       <Users className="h-3 w-3 text-blue-600" />
                       <span className="text-xs font-semibold text-blue-700">{applicantCount}</span>
-                      <span className="text-xs text-blue-600">sollicitanten</span>
+                      <span className="text-xs text-blue-600">nieuw</span>
                     </div>
                   </div>
                 )}
@@ -136,10 +140,14 @@ export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, allCompanies 
             </div>
             <div className="grid grid-cols-2 gap-3 text-xs">
               <div>
-                <span className="text-gray-500 block mb-1">Sollicitanten</span>
-                <span className="text-gray-900 font-medium flex items-center gap-1">
+                <span className="text-gray-500 block mb-1">Gesolliciteerd</span>
+                <span
+                  className="text-gray-900 font-medium flex items-center gap-1"
+                  title={`${totalApplicantCount} totaal gesolliciteerd`}
+                >
                   <Users className="h-3 w-3 text-blue-600" />
                   {applicantCount}
+                  <span className="text-[10px] text-gray-400 font-normal">nieuw</span>
                 </span>
               </div>
               <div>
@@ -245,9 +253,15 @@ export function VacancyRow({ vacancy, isAdmin, applicantCount = 0, allCompanies 
           </div>
         </td>
         <td className="p-2 pr-4 text-xs text-gray-700 whitespace-nowrap text-center align-top">
-          <div className="flex items-center justify-center gap-1">
+          <div
+            className="flex items-center justify-center gap-1"
+            title={`${totalApplicantCount} totaal gesolliciteerd`}
+          >
             <Users className="h-3.5 w-3.5 text-blue-600 flex-shrink-0" />
             <span className="font-semibold text-gray-900">{applicantCount}</span>
+            {applicantCount > 0 && (
+              <span className="text-[10px] text-blue-400">nieuw</span>
+            )}
           </div>
         </td>
         <td className="p-2 pl-4 text-xs text-gray-700 align-top">

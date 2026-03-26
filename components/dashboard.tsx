@@ -153,6 +153,7 @@ export default function Dashboard() {
 
   const companyHires = companyHiresData?.companyHires || {};
   const applicantsPerVacancy = vacancyApplicantsData?.applicantsPerVacancy || {};
+  const newApplicantsPerVacancy = vacancyApplicantsData?.newApplicantsPerVacancy || {};
   const companyHours = companyHoursData?.hours || [];
   const previousWeekHours = companyHoursData?.previousWeekHours || [];
 
@@ -934,6 +935,7 @@ export default function Dashboard() {
               vacancies={filteredVacancies}
               companyHires={companyHires}
               applicantsPerVacancy={applicantsPerVacancy}
+              newApplicantsPerVacancy={newApplicantsPerVacancy}
               companyHoursData={companyHours}
               previousWeekHoursData={previousWeekHours}
               searchQuery={searchQuery}
@@ -949,12 +951,13 @@ export default function Dashboard() {
             />
           ) : viewMode === 'compact' ? (
             // Compact View - Company groups in compact format
-            <CompactView 
-              companyGroups={filteredCompanyGroups} 
+            <CompactView
+              companyGroups={filteredCompanyGroups}
               isAdmin={userRole === 'admin'}
               companyHires={companyHires}
               searchQuery={searchQuery}
               applicantsPerVacancy={applicantsPerVacancy}
+              newApplicantsPerVacancy={newApplicantsPerVacancy}
             />
           ) : (
             // Table View - Original table view per company
@@ -971,7 +974,7 @@ export default function Dashboard() {
           return (
             <div 
               key={`company-group-${index}-${group.company.id}`} 
-              className={`bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 ${priorityBorderColor} overflow-hidden transition-shadow hover:shadow-md`}
+              className={`bg-white rounded-xl shadow-sm border border-gray-200 border-l-4 ${priorityBorderColor} transition-shadow hover:shadow-md`}
             >
               {/* Company Header */}
               <div className="bg-gradient-to-r from-gray-50 to-white px-6 py-4 border-b border-gray-200">
@@ -1180,7 +1183,7 @@ export default function Dashboard() {
 
               {/* Vacatures - Only show when not collapsed */}
               {!isCompanyCollapsed && (
-              <div>
+              <div className="overflow-hidden rounded-b-xl">
                 {group.vacancies.length > 0 ? (
                   // Fallback: show table if functions are not available
                   <table className="w-full border-collapse table-fixed" role="table" aria-label={`Vacatures voor ${group.company.name}`}>
@@ -1197,7 +1200,7 @@ export default function Dashboard() {
                     <thead className="hidden sm:table-header-group">
                       <tr className="bg-gray-50 border-b border-gray-200">
                         <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Vacature</th>
-                        <th scope="col" className="text-center p-2 pr-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">Sollicitanten</th>
+                        <th scope="col" className="text-center p-2 pr-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">Gesolliciteerd</th>
                         <th scope="col" className="text-left p-2 pl-4 text-xs font-semibold text-gray-700 uppercase tracking-wider">Klant pijn</th>
                         <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Tijdkritiek</th>
                         <th scope="col" className="text-left p-2 text-xs font-semibold text-gray-700 uppercase tracking-wider">Strategie</th>
@@ -1210,13 +1213,15 @@ export default function Dashboard() {
                     </thead>
                     <tbody>
                       {group.vacancies.map((vacancy) => {
-                        const applicantCount = applicantsPerVacancy[vacancy.job.id.toString()] || 0;
+                        const newApplicantCount = newApplicantsPerVacancy[vacancy.job.id.toString()] || 0;
+                        const totalApplicantCount = applicantsPerVacancy[vacancy.job.id.toString()] || 0;
                         return (
                           <VacancyRow
                             key={vacancy.job.id}
                             vacancy={vacancy}
                             isAdmin={userRole === 'admin'}
-                            applicantCount={applicantCount}
+                            applicantCount={newApplicantCount}
+                            totalApplicantCount={totalApplicantCount}
                             allCompanies={finalCompanyGroups
                               .filter(g => g.company.name !== 'Overig' && g.company.name !== 'Onbekend Bedrijf')
                               .map(g => ({ id: g.company.id, name: g.company.name }))}

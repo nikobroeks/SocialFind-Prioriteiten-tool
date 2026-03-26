@@ -37,15 +37,25 @@ export async function GET(request: Request) {
       });
     }
 
-    // Count applicants per vacancy ID
+    // Count applicants per vacancy ID (total and new in last 7 days)
     const applicantsPerVacancy: Record<string, number> = {};
+    const newApplicantsPerVacancy: Record<string, number> = {};
+
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
     applications.forEach((app: any) => {
       const vacancyId = app.offer_id || app.job_id || null;
-      if (!vacancyId) return; // Skip if no vacancy ID
+      if (!vacancyId) return;
 
       const key = vacancyId.toString();
       applicantsPerVacancy[key] = (applicantsPerVacancy[key] || 0) + 1;
+
+      // Count as "new" if created in the last 7 days
+      const createdAt = app.created_at ? new Date(app.created_at) : null;
+      if (createdAt && createdAt >= sevenDaysAgo) {
+        newApplicantsPerVacancy[key] = (newApplicantsPerVacancy[key] || 0) + 1;
+      }
     });
 
     const totalApplicants = applications.length;
@@ -59,6 +69,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       applicantsPerVacancy,
+      newApplicantsPerVacancy,
       totalApplicants,
       totalVacancies,
       source: 'cache',

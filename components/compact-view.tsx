@@ -12,9 +12,10 @@ interface CompactViewProps {
   companyHires?: Record<string, number>;
   searchQuery?: string;
   applicantsPerVacancy?: Record<string, number>;
+  newApplicantsPerVacancy?: Record<string, number>;
 }
 
-export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQuery = '', applicantsPerVacancy = {} }: CompactViewProps) {
+export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQuery = '', applicantsPerVacancy = {}, newApplicantsPerVacancy = {} }: CompactViewProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedVacancy, setSelectedVacancy] = useState<VacancyWithPriority | null>(null);
 
@@ -122,7 +123,8 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                 </div>
               ) : (
                 group.vacancies.map((vacancy) => {
-                  const applicantCount = applicantsPerVacancy[vacancy.job.id.toString()] || 0;
+                  const newApplicantCount = newApplicantsPerVacancy[vacancy.job.id.toString()] || 0;
+                  const totalApplicantCount = applicantsPerVacancy[vacancy.job.id.toString()] || 0;
                   return (
                 <div
                   key={vacancy.job.id}
@@ -134,11 +136,14 @@ export function CompactView({ companyGroups, isAdmin, companyHires = {}, searchQ
                         <h4 className="font-medium text-gray-900 text-xs truncate max-w-[260px] sm:max-w-sm">
                           {vacancy.job.title}
                         </h4>
-                        {applicantCount > 0 && (
-                          <div className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded-full">
+                        {(newApplicantCount > 0 || totalApplicantCount > 0) && (
+                          <div
+                            className="flex items-center gap-1 px-1.5 py-0.5 bg-blue-50 border border-blue-200 rounded-full"
+                            title={`${totalApplicantCount} totaal gesolliciteerd`}
+                          >
                             <Users className="h-3 w-3 text-blue-600" />
-                            <span className="text-xs font-semibold text-blue-700">{applicantCount}</span>
-                            <span className="text-xs text-blue-600">sollicitanten</span>
+                            <span className="text-xs font-semibold text-blue-700">{newApplicantCount}</span>
+                            <span className="text-xs text-blue-600">gesolliciteerd</span>
                           </div>
                         )}
                         <PriorityBadge priority={vacancy.displayPriority} />
