@@ -37,9 +37,12 @@ export async function GET(request: Request) {
       });
     }
 
-    // Count applicants per vacancy ID (total and those still in 'applied' first stage)
+    // Count applicants per vacancy ID (total and those applied in the last 4 days)
     const applicantsPerVacancy: Record<string, number> = {};
     const newApplicantsPerVacancy: Record<string, number> = {};
+
+    const fourDaysAgo = new Date();
+    fourDaysAgo.setDate(fourDaysAgo.getDate() - 4);
 
     applications.forEach((app: any) => {
       const vacancyId = app.offer_id || app.job_id || null;
@@ -48,9 +51,9 @@ export async function GET(request: Request) {
       const key = vacancyId.toString();
       applicantsPerVacancy[key] = (applicantsPerVacancy[key] || 0) + 1;
 
-      // Count as "gesolliciteerd" if candidate is still in the first 'applied' stage
-      const stageCategory = app.stage?.category?.toLowerCase() || '';
-      if (stageCategory === 'applied') {
+      // Count as "gesolliciteerd" if created in the last 4 days
+      const createdAt = app.created_at ? new Date(app.created_at) : null;
+      if (createdAt && createdAt >= fourDaysAgo) {
         newApplicantsPerVacancy[key] = (newApplicantsPerVacancy[key] || 0) + 1;
       }
     });
